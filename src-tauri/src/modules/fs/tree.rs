@@ -1,0 +1,116 @@
+use std::path::PathBuf;
+use std::time::UNIX_EPOCH;
+
+use serde::Serialize;
+
+#[derive(Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum EntryKind {
+    File,
+    Dir,
+    Symlink,
+}
+
+#[derive(Serialize)]
+pub struct DirEntry {
+    pub name: String,
+    pub kind: EntryKind,
+    pub size: u64,
+    /// Milliseconds since UNIX epoch; 0 if unavailable.
+    pub mtime: u64,
+}
+
+/// Lists immediate children of `path`. Dirs first, then files, each sorted
+/// case-insensitively. Hidden (dot-prefix) entries are filtered — UI may add
+/// a "show hidden" toggle later.
+#[tauri::command]
+pub fn fs_read_dir(path: String) -> Result<Vec<DirEntry>, String> {
+    let root = PathBuf::from(&path);
+    let read = std::fs::read_dir(&root).map_err(|e| {
+        log::debug!("fs_read_dir({}) failed: {e}", root.display());
+        e.to_string()
+    })?;
+
+    let mut entries: Vec<DirEntry> = read
+        .filter_map(Result::ok)
+        .filter_map(|entry| {
+            let name = entry.file_name().into_string().ok()?;
+            if name.starts_with('.') {
+                return None;
+            }
+
+            let ft = entry.file_type().ok()?;
+            let meta = entry.metadata().ok();
+
+            // Symlinks resolve to the target's kind for display; matches
+            // how editors typically render linked files/folders.
+            let kind = if ft.is_symlink() {
+                match std::fs::metadata(entry.path()) {
+                    Ok(m) if m.is_dir() => EntryKind::Dir,
+                    Ok(_) => EntryKind::File,
+                    Err(_) => EntryKind::Symlink,
+                }
+            } else if ft.is_dir() {
+                EntryKind::Dir
+            } else {
+                EntryKind::File
+            };
+
+            let size = meta.as_ref().map(|m| m.len()).unwrap_or(0);
+            let mtime = meta
+                .and_then(|m| m.modified().ok())
+                .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+                .map(|d| d.as_millis() as u64)
+                .unwrap_or(0);
+
+            Some(DirEntry {
+                name,
+                kind,
+                size,
+                mtime,
+            })
+        })
+        .collect();
+
+    entries.sort_by(|a, b| {
+        let rank = |k: &EntryKind| match k {
+            EntryKind::Dir => 0,
+            EntryKind::Symlink => 1,
+            EntryKind::File => 2,
+        };
+        rank(&a.kind)
+            .cmp(&rank(&b.kind))
+            .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+    });
+
+    Ok(entries)
+}
+
+/// Lists immediate subdirectories of `path`. Kept for the CwdBreadcrumb.
+///
+/// Symlinks to directories are included (matches shell `cd` semantics).
+/// Hidden entries are filtered by dot-prefix only.
+#[tauri::command]
+pub fn list_subdirs(path: String) -> Result<Vec<String>, String> {
+    let root = PathBuf::from(&path);
+    let read = std::fs::read_dir(&root).map_err(|e| {
+        log::debug!("list_subdirs({}) read_dir failed: {e}", root.display());
+        e.to_string()
+    })?;
+
+    let mut dirs: Vec<String> = read
+        .filter_map(Result::ok)
+        .filter(|entry| match entry.file_type() {
+            Ok(t) if t.is_dir() => true,
+            Ok(t) if t.is_symlink() => std::fs::metadata(entry.path())
+                .map(|m| m.is_dir())
+                .unwrap_or(false),
+            _ => false,
+        })
+        .filter_map(|entry| entry.file_name().into_string().ok())
+        .filter(|name| !name.starts_with('.'))
+        .collect();
+
+    dirs.sort_by_key(|a| a.to_lowercase());
+    Ok(dirs)
+}

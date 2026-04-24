@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { fileIconUrl } from "@/modules/explorer/lib/iconResolver";
 import {
   Cancel01Icon,
   Folder01Icon,
@@ -33,20 +34,14 @@ export function TabBar({ tabs, activeId, onSelect, onNew, onClose }: Props) {
               className="group h-7 gap-1.5 rounded-md px-2.5 text-xs text-muted-foreground transition-colors data-[state=active]:bg-accent data-[state=active]:text-foreground hover:text-foreground/80"
             >
               <span className="max-w-50 truncate flex items-center gap-2 px-4">
-                {t.id == activeId ? (
-                  <HugeiconsIcon
-                    icon={Folder02Icon}
-                    size={14}
-                    strokeWidth={2}
-                  />
-                ) : (
-                  <HugeiconsIcon
-                    icon={Folder01Icon}
-                    size={14}
-                    strokeWidth={2}
+                <TabIcon tab={t} active={t.id === activeId} />
+                {labelFor(t)}
+                {t.kind === "editor" && t.dirty && (
+                  <span
+                    aria-label="Unsaved changes"
+                    className="size-1.5 rounded-full bg-foreground/70"
                   />
                 )}
-                {labelFor(t)}
               </span>
               {tabs.length > 1 && (
                 <span
@@ -82,7 +77,24 @@ export function TabBar({ tabs, activeId, onSelect, onNew, onClose }: Props) {
   );
 }
 
+function TabIcon({ tab, active }: { tab: Tab; active: boolean }) {
+  if (tab.kind === "editor") {
+    const url = fileIconUrl(tab.title);
+    return url ? (
+      <img src={url} alt="" className="size-3.5 shrink-0" />
+    ) : null;
+  }
+  return (
+    <HugeiconsIcon
+      icon={active ? Folder02Icon : Folder01Icon}
+      size={14}
+      strokeWidth={2}
+    />
+  );
+}
+
 function labelFor(t: Tab): string {
+  if (t.kind === "editor") return t.title;
   if (!t.cwd) return t.title;
   const parts = t.cwd.split("/").filter(Boolean);
   return parts.length ? parts[parts.length - 1] : "/";

@@ -10,6 +10,8 @@
     "opener:default",
     "core:window:allow-start-dragging",
     "log:default",
-    "os:default"
+    "os:default",
+    "dialog:default",
+    "store:default"
   ]
 }

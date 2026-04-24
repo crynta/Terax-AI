@@ -1,2 +1,7 @@
 export { TabBar } from "./TabBar";
-export { useTabs, type Tab } from "./lib/useTabs";
+export {
+  useTabs,
+  type Tab,
+  type TerminalTab,
+  type EditorTab,
+} from "./lib/useTabs";

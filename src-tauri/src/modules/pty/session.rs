@@ -92,9 +92,7 @@ pub fn spawn(
                 }
             }
             if dropped_bytes > 0 {
-                log::warn!(
-                    "pty backpressure: dropped {dropped_bytes} bytes (cap {MAX_PENDING})"
-                );
+                log::warn!("pty backpressure: dropped {dropped_bytes} bytes (cap {MAX_PENDING})");
             }
         })
         .expect("spawn pty reader thread");

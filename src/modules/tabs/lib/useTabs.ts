@@ -1,23 +1,77 @@
 import { useCallback, useRef, useState } from "react";
 
-export type Tab = {
+export type TerminalTab = {
   id: number;
+  kind: "terminal";
   title: string;
   cwd?: string;
 };
 
-export function useTabs(initial?: Partial<Tab>) {
+export type EditorTab = {
+  id: number;
+  kind: "editor";
+  title: string;
+  path: string;
+  dirty: boolean;
+};
+
+export type Tab = TerminalTab | EditorTab;
+
+export type TabPatch = Partial<{
+  title: string;
+  cwd: string;
+  dirty: boolean;
+}>;
+
+function basename(path: string): string {
+  const parts = path.split("/").filter(Boolean);
+  return parts.length ? parts[parts.length - 1] : path;
+}
+
+export function useTabs(initial?: Partial<TerminalTab>) {
   const [tabs, setTabs] = useState<Tab[]>([
-    { id: 1, title: initial?.title ?? "shell", ...initial },
+    {
+      id: 1,
+      kind: "terminal",
+      title: initial?.title ?? "shell",
+      cwd: initial?.cwd,
+    },
   ]);
   const [activeId, setActiveId] = useState(1);
   const nextIdRef = useRef(2);
 
   const newTab = useCallback((cwd?: string) => {
     const id = nextIdRef.current++;
-    setTabs((t) => [...t, { id, title: "shell", cwd }]);
+    setTabs((t) => [...t, { id, kind: "terminal", title: "shell", cwd }]);
     setActiveId(id);
     return id;
+  }, []);
+
+  const openFileTab = useCallback((path: string) => {
+    let targetId: number | null = null;
+    setTabs((curr) => {
+      const existing = curr.find(
+        (t) => t.kind === "editor" && t.path === path,
+      );
+      if (existing) {
+        targetId = existing.id;
+        return curr;
+      }
+      const id = nextIdRef.current++;
+      targetId = id;
+      return [
+        ...curr,
+        {
+          id,
+          kind: "editor",
+          title: basename(path),
+          path,
+          dirty: false,
+        },
+      ];
+    });
+    if (targetId !== null) setActiveId(targetId);
+    return targetId as number | null;
   }, []);
 
   const closeTab = useCallback((id: number) => {
@@ -32,8 +86,24 @@ export function useTabs(initial?: Partial<Tab>) {
     });
   }, []);
 
-  const updateTab = useCallback((id: number, patch: Partial<Tab>) => {
-    setTabs((t) => t.map((x) => (x.id === id ? { ...x, ...patch } : x)));
+  const updateTab = useCallback((id: number, patch: TabPatch) => {
+    setTabs((t) =>
+      t.map((x) => {
+        if (x.id !== id) return x;
+        if (x.kind === "terminal") {
+          return {
+            ...x,
+            ...(patch.title !== undefined && { title: patch.title }),
+            ...(patch.cwd !== undefined && { cwd: patch.cwd }),
+          };
+        }
+        return {
+          ...x,
+          ...(patch.title !== undefined && { title: patch.title }),
+          ...(patch.dirty !== undefined && { dirty: patch.dirty }),
+        };
+      }),
+    );
   }, []);
 
   const selectByIndex = useCallback(
@@ -49,6 +119,7 @@ export function useTabs(initial?: Partial<Tab>) {
     activeId,
     setActiveId,
     newTab,
+    openFileTab,
     closeTab,
     updateTab,
     selectByIndex,

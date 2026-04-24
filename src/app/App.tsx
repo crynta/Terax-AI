@@ -11,6 +11,8 @@ import {
   AiSessionView,
   useSessions,
 } from "@/modules/ai";
+import { EditorPane } from "@/modules/editor";
+import { FileExplorer } from "@/modules/explorer";
 import { Header, type SearchInlineHandle } from "@/modules/header";
 import { ShortcutsDialog } from "@/modules/shortcuts";
 import { StatusBar } from "@/modules/statusbar";
@@ -20,6 +22,7 @@ import { homeDir } from "@tauri-apps/api/path";
 import type { SearchAddon } from "@xterm/addon-search";
 import { AnimatePresence, motion } from "motion/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { PanelImperativeHandle } from "react-resizable-panels";
 
 export default function App() {
   const {
@@ -27,6 +30,7 @@ export default function App() {
     activeId,
     setActiveId,
     newTab,
+    openFileTab,
     closeTab,
     updateTab,
     selectByIndex,
@@ -38,6 +42,14 @@ export default function App() {
   const searchInlineRef = useRef<SearchInlineHandle | null>(null);
   const terminalRefs = useRef<Map<number, TerminalPaneHandle>>(new Map());
   const aiInputRef = useRef<AiInputHandle | null>(null);
+
+  const sidebarRef = useRef<PanelImperativeHandle | null>(null);
+  const toggleSidebar = useCallback(() => {
+    const p = sidebarRef.current;
+    if (!p) return;
+    if (p.getSize().asPercentage <= 0) p.expand();
+    else p.collapse();
+  }, []);
 
   const [home, setHome] = useState<string | null>(null);
   useEffect(() => {
@@ -52,6 +64,8 @@ export default function App() {
 
   const activeTab = tabs.find((t) => t.id === activeId);
   const activeSession = sessions.get(activeId);
+  const isTerminalTab = activeTab?.kind === "terminal";
+  const isEditorTab = activeTab?.kind === "editor";
 
   useEffect(() => {
     setActiveSearchAddon(searchAddons.current.get(activeId) ?? null);
@@ -67,12 +81,19 @@ export default function App() {
 
   const handleClose = useCallback(
     (id: number) => {
+      const t = tabs.find((x) => x.id === id);
+      if (t?.kind === "editor" && t.dirty) {
+        const ok = window.confirm(
+          `"${t.title}" has unsaved changes. Close anyway?`,
+        );
+        if (!ok) return;
+      }
       searchAddons.current.delete(id);
       terminalRefs.current.delete(id);
       sessions.clear(id);
       closeTab(id);
     },
-    [closeTab, sessions],
+    [tabs, closeTab, sessions],
   );
 
   const cycleTab = useCallback(
@@ -94,7 +115,13 @@ export default function App() {
   }, []);
 
   const openNewTab = useCallback(() => {
-    const inherited = tabs.find((t) => t.id === activeId)?.cwd ?? home ?? undefined;
+    const inheritedTab = tabs.find(
+      (t) => t.id === activeId && t.kind === "terminal",
+    );
+    const inherited =
+      (inheritedTab?.kind === "terminal" ? inheritedTab.cwd : undefined) ??
+      home ??
+      undefined;
     newTab(inherited);
   }, [tabs, activeId, home, newTab]);
 
@@ -116,6 +143,13 @@ export default function App() {
       sessions.start(activeId, prompt);
     },
     [sessions, activeId],
+  );
+
+  const handleOpenFile = useCallback(
+    (path: string) => {
+      openFileTab(path);
+    },
+    [openFileTab],
   );
 
   useEffect(() => {
@@ -141,6 +175,8 @@ export default function App() {
         consume();
         handleClose(activeId);
       } else if (e.key === "f") {
+        // Let CodeMirror's own search handle Cmd+F on editor tabs.
+        if (isEditorTab) return;
         consume();
         searchInlineRef.current?.focus();
       } else if (e.key === "i") {
@@ -149,6 +185,9 @@ export default function App() {
       } else if (e.key === "k") {
         consume();
         setShortcutsOpen((v) => !v);
+      } else if (e.key === "b") {
+        consume();
+        toggleSidebar();
       } else if (/^[1-9]$/.test(e.key)) {
         consume();
         selectByIndex(parseInt(e.key, 10) - 1);
@@ -157,30 +196,63 @@ export default function App() {
     window.addEventListener("keydown", onKey, { capture: true });
     return () =>
       window.removeEventListener("keydown", onKey, { capture: true });
-  }, [activeId, cycleTab, handleClose, openNewTab, selectByIndex, toggleAi]);
+  }, [
+    activeId,
+    cycleTab,
+    handleClose,
+    openNewTab,
+    selectByIndex,
+    toggleAi,
+    toggleSidebar,
+    isEditorTab,
+  ]);
 
+  // Terminal panes stay mounted to preserve PTY state; only the active one is visible.
   const terminalStack = useMemo(
     () => (
       <div className="relative h-full w-full">
-        {tabs.map((t) => (
-          <div key={t.id} className="absolute inset-0">
-            <TerminalPane
-              tabId={t.id}
-              visible={t.id === activeId}
-              initialCwd={t.cwd}
-              ref={(h) => {
-                if (h) terminalRefs.current.set(t.id, h);
-                else terminalRefs.current.delete(t.id);
-              }}
-              onSearchReady={handleSearchReady}
-              onCwd={(id, cwd) => updateTab(id, { cwd })}
-            />
-          </div>
-        ))}
+        {tabs
+          .filter((t) => t.kind === "terminal")
+          .map((t) => (
+            <div key={t.id} className="absolute inset-0">
+              <TerminalPane
+                tabId={t.id}
+                visible={t.id === activeId}
+                initialCwd={t.kind === "terminal" ? t.cwd : undefined}
+                ref={(h) => {
+                  if (h) terminalRefs.current.set(t.id, h);
+                  else terminalRefs.current.delete(t.id);
+                }}
+                onSearchReady={handleSearchReady}
+                onCwd={(id, cwd) => updateTab(id, { cwd })}
+              />
+            </div>
+          ))}
       </div>
     ),
     [tabs, activeId, handleSearchReady, updateTab],
   );
+
+  const mainContent = useMemo(() => {
+    if (!activeTab) return null;
+    if (activeTab.kind === "editor") {
+      return (
+        <div className="h-full px-3 pt-2 pb-2">
+          <div className="h-full overflow-hidden rounded-md border border-border/60 bg-background">
+            <EditorPane
+              key={activeTab.id}
+              path={activeTab.path}
+              onDirtyChange={(dirty) => updateTab(activeTab.id, { dirty })}
+            />
+          </div>
+        </div>
+      );
+    }
+    return <div className="h-full px-3 pt-2 pb-2">{terminalStack}</div>;
+  }, [activeTab, terminalStack, updateTab]);
+
+  const activeCwd =
+    activeTab?.kind === "terminal" ? (activeTab.cwd ?? null) : null;
 
   return (
     <ThemeProvider>
@@ -192,53 +264,76 @@ export default function App() {
             onSelect={setActiveId}
             onNew={openNewTab}
             onClose={handleClose}
-            onToggleSidebar={() => {}}
+            onToggleSidebar={toggleSidebar}
             onOpenShortcuts={() => setShortcutsOpen(true)}
             onOpenSettings={() => {}}
-            searchAddon={activeSearchAddon}
+            searchAddon={isTerminalTab ? activeSearchAddon : null}
             searchRef={searchInlineRef}
           />
 
           <main className="flex min-h-0 flex-1 flex-col">
             <ResizablePanelGroup
-              orientation="vertical"
+              orientation="horizontal"
               className="min-h-0 flex-1"
             >
               <ResizablePanel
-                id="terminal"
-                defaultSize={aiOpen && activeSession ? 65 : 100}
-                minSize={25}
+                id="sidebar"
+                panelRef={sidebarRef}
+                defaultSize="22%"
+                minSize="14%"
+                maxSize="40%"
+                collapsible
+                collapsedSize={0}
               >
-                <div className="h-full px-3 pt-2 pb-2">{terminalStack}</div>
+                <div className="h-full border-r border-border/60 bg-card">
+                  <FileExplorer onOpenFile={handleOpenFile} />
+                </div>
               </ResizablePanel>
-              {aiOpen && activeSession ? (
-                <>
-                  <ResizableHandle />
+              <ResizableHandle withHandle />
+              <ResizablePanel
+                id="workspace"
+                defaultSize="78%"
+                minSize="30%"
+              >
+                <ResizablePanelGroup
+                  orientation="vertical"
+                  className="min-h-0 flex-1"
+                >
                   <ResizablePanel
-                    id="ai"
-                    defaultSize={35}
-                    minSize={15}
+                    id="main"
+                    defaultSize={
+                      aiOpen && activeSession && isTerminalTab ? 65 : 100
+                    }
+                    minSize={25}
                   >
-                    <motion.div
-                      key="ai-session"
-                      initial={{ opacity: 0, y: 8 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{
-                        type: "spring",
-                        stiffness: 280,
-                        damping: 30,
-                      }}
-                      className="h-full"
-                    >
-                      <AiSessionView session={activeSession} />
-                    </motion.div>
+                    {mainContent}
                   </ResizablePanel>
-                </>
-              ) : null}
+                  {aiOpen && activeSession && isTerminalTab ? (
+                    <>
+                      <ResizableHandle />
+                      <ResizablePanel id="ai" defaultSize={35} minSize={15}>
+                        <motion.div
+                          key="ai-session"
+                          initial={{ opacity: 0, y: 8 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{
+                            type: "spring",
+                            stiffness: 280,
+                            damping: 30,
+                          }}
+                          className="h-full"
+                        >
+                          <AiSessionView session={activeSession} />
+                        </motion.div>
+                      </ResizablePanel>
+                    </>
+                  ) : null}
+                </ResizablePanelGroup>
+              </ResizablePanel>
             </ResizablePanelGroup>
 
             <AnimatePresence initial={false}>
-              {aiOpen && (
+              {aiOpen && isTerminalTab && (
                 <motion.div
                   key="ai-input"
                   initial={{ height: 0, opacity: 0 }}
@@ -262,7 +357,7 @@ export default function App() {
           </main>
 
           <StatusBar
-            cwd={activeTab?.cwd ?? null}
+            cwd={activeCwd}
             home={home}
             onCd={sendCd}
             aiOpen={aiOpen}

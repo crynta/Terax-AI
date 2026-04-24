@@ -1,4 +1,4 @@
-import { shadcnDark } from "@/themes";
+import { buildTerminalTheme } from "@/themes";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { FitAddon } from "@xterm/addon-fit";
 import { SearchAddon } from "@xterm/addon-search";
@@ -11,7 +11,7 @@ import { openPty, type PtySession } from "./pty-bridge";
 
 const FONT_FAMILY = '"JetBrains Mono", SFMono-Regular, Menlo, monospace';
 const FONT_SIZE = 14;
-const RESIZE_DEBOUNCE_MS = 10;
+const RESIZE_DEBOUNCE_MS = 7.5;
 
 type Options = {
   container: React.RefObject<HTMLDivElement | null>;
@@ -46,7 +46,7 @@ export function useTerminalSession({
         fontFamily: FONT_FAMILY,
         fontSize: FONT_SIZE,
         lineHeight: 1.25,
-        theme: shadcnDark,
+        theme: buildTerminalTheme(),
         cursorBlink: true,
         cursorStyle: "bar",
         cursorInactiveStyle: "outline",
