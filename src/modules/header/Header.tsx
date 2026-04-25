@@ -7,9 +7,12 @@ import {
   SidebarLeftIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import type { SearchAddon } from "@xterm/addon-search";
-import type { RefObject } from "react";
-import { SearchInline, type SearchInlineHandle } from "./SearchInline";
+import { useEffect, useRef, useState, type RefObject } from "react";
+import {
+  SearchInline,
+  type SearchInlineHandle,
+  type SearchTarget,
+} from "./SearchInline";
 
 type Props = {
   tabs: Tab[];
@@ -20,9 +23,11 @@ type Props = {
   onToggleSidebar: () => void;
   onOpenShortcuts: () => void;
   onOpenSettings: () => void;
-  searchAddon: SearchAddon | null;
+  searchTarget: SearchTarget;
   searchRef: RefObject<SearchInlineHandle | null>;
 };
+
+const COMPACT_WIDTH = 720;
 
 export function Header({
   tabs,
@@ -33,11 +38,26 @@ export function Header({
   onToggleSidebar,
   onOpenShortcuts,
   onOpenSettings,
-  searchAddon,
+  searchTarget,
   searchRef,
 }: Props) {
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [compact, setCompact] = useState(false);
+
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver((entries) => {
+      const w = entries[0]?.contentRect.width ?? 0;
+      setCompact(w < COMPACT_WIDTH);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   return (
     <div
+      ref={rootRef}
       data-tauri-drag-region
       className="flex h-10 shrink-0 items-center gap-2 border-b border-border/60 bg-card pr-2 pl-20 select-none"
     >
@@ -46,28 +66,34 @@ export function Header({
         title="Toggle sidebar"
         variant="ghost"
         size="icon"
-        className="rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+        className="shrink-0 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
       >
         <HugeiconsIcon icon={SidebarLeftIcon} size={18} strokeWidth={1.75} />
       </Button>
 
-      <span className="mx-1 h-full w-px bg-border" />
-      <TabBar
-        tabs={tabs}
-        activeId={activeId}
-        onSelect={onSelect}
-        onNew={onNew}
-        onClose={onClose}
-      />
+      <span className="mx-1 h-full w-px shrink-0 bg-border" />
 
-      <div data-tauri-drag-region className="h-full min-w-4 flex-1" />
+      <div
+        className="flex min-w-0 flex-1 items-center gap-2"
+        data-tauri-drag-region
+      >
+        <TabBar
+          tabs={tabs}
+          activeId={activeId}
+          onSelect={onSelect}
+          onNew={onNew}
+          onClose={onClose}
+          compact={compact}
+        />
+        <div data-tauri-drag-region className="h-full min-w-2 flex-1" />
+      </div>
 
-      <SearchInline ref={searchRef} addon={searchAddon} />
+      <SearchInline ref={searchRef} target={searchTarget} compact={compact} />
 
       <Button
         variant="ghost"
         size="icon"
-        className="size-7 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+        className="size-7 shrink-0 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
         onClick={onOpenShortcuts}
         title="Keyboard shortcuts (⌘K)"
       >
@@ -77,7 +103,7 @@ export function Header({
       <Button
         variant="ghost"
         size="icon"
-        className="size-7 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+        className="size-7 shrink-0 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
         onClick={onOpenSettings}
         title="Settings"
       >

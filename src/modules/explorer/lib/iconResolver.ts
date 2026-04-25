@@ -1,4 +1,5 @@
 import manifest from "material-icon-theme/dist/material-icons.json";
+import { EXT_TO_LANGUAGE_ID } from "./constants";
 
 type Manifest = {
   iconDefinitions: Record<string, { iconPath: string }>;
@@ -65,6 +66,15 @@ export function fileIconUrl(name: string): string {
     if (iconName) {
       const url = resolveUrl(iconName);
       if (url) return url;
+    }
+    // Fallback: ext → language id → icon (covers ts/js/html/etc.).
+    const langId = EXT_TO_LANGUAGE_ID[ext];
+    if (langId) {
+      const iconByLang = m.languageIds[langId];
+      if (iconByLang) {
+        const url = resolveUrl(iconByLang);
+        if (url) return url;
+      }
     }
     const nextDot = ext.indexOf(".");
     if (nextDot === -1) break;

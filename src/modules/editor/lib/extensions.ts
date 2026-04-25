@@ -1,55 +1,81 @@
-import { autocompletion, closeBrackets } from "@codemirror/autocomplete";
-import {
-  bracketMatching,
-  foldGutter,
-  indentOnInput,
-  indentUnit,
-} from "@codemirror/language";
+import { indentUnit } from "@codemirror/language";
 import { lintGutter } from "@codemirror/lint";
-import { highlightSelectionMatches, search } from "@codemirror/search";
+import { search } from "@codemirror/search";
 import { Compartment, EditorState, type Extension } from "@codemirror/state";
-import { EditorView, highlightActiveLine } from "@codemirror/view";
+import { EditorView } from "@codemirror/view";
 
-/**
- * Compartments allow dynamic reconfiguration (language swap, wrap toggle,
- * readOnly flip) without rebuilding the editor state.
- */
+// Compartments allow runtime reconfiguration without rebuilding state.
 export const languageCompartment = new Compartment();
 export const readOnlyCompartment = new Compartment();
 export const wrapCompartment = new Compartment();
 
-/**
- * Extensions shared by every editor instance. Keep this list minimal and
- * non-language-specific; language packs are applied via `languageCompartment`.
- *
- * `basicSetup` from @uiw/react-codemirror covers line numbers, history,
- * default keymaps, etc., so we only add the things it doesn't.
- */
+// Only what basicSetup doesn't already cover, to avoid duplicate extensions.
+// basicSetup gives us line numbers, fold gutter, history, indentOnInput,
+// bracketMatching, closeBrackets, autocompletion, highlightActiveLine,
+// highlightSelectionMatches and the search keymap.
 export function buildSharedExtensions(): Extension[] {
   return [
     indentUnit.of("  "),
     EditorState.tabSize.of(2),
-    closeBrackets(),
-    bracketMatching(),
-    indentOnInput(),
-    foldGutter(),
-    highlightActiveLine(),
-    highlightSelectionMatches(),
     search({ top: true }),
-    autocompletion(),
-    // lintGutter shows a dedicated column for diagnostics; stays empty
-    // until an LSP or other diagnostic source pushes into it.
     lintGutter(),
     EditorView.theme({
-      "&": { height: "100%" },
+      "&, &.cm-editor, &.cm-editor.cm-focused": {
+        backgroundColor: "transparent !important",
+        color: "var(--foreground)",
+        outline: "none",
+        padding: "8px",
+      },
       ".cm-scroller": {
-        fontFamily:
-          '"JetBrains Mono", SFMono-Regular, Menlo, monospace',
+        fontFamily: '"JetBrains Mono", SFMono-Regular, Menlo, monospace',
         fontSize: "13px",
         lineHeight: "1.55",
+        backgroundColor: "transparent !important",
       },
-      ".cm-content": { padding: "8px 0" },
-      ".cm-gutters": { borderRight: "none" },
+      ".cm-content": {
+        caretColor: "var(--foreground)",
+        backgroundColor: "transparent !important",
+      },
+      ".cm-gutters": {
+        backgroundColor: "transparent !important",
+        color: "var(--muted-foreground)",
+      },
+      ".cm-gutter-lint": {
+        width: "0px",
+      },
+      ".cm-gutter": { backgroundColor: "transparent !important" },
+      ".cm-lineNumbers .cm-gutterElement": {
+        opacity: "0.55",
+      },
+      ".cm-foldGutter": { width: "10px" },
+      ".cm-foldGutter .cm-gutterElement": {
+        color: "var(--muted-foreground)",
+        opacity: "0.5",
+      },
+      ".cm-activeLine": {
+        borderTopRightRadius: "5px",
+        borderBottomRightRadius: "5px",
+        backgroundColor:
+          "color-mix(in srgb, var(--foreground) 4%, transparent)",
+      },
+      ".cm-activeLineGutter": {
+        borderTopLeftRadius: "5px",
+        borderBottomLeftRadius: "5px",
+        userSelect: "none",
+      },
+      ".cm-cursor, .cm-dropCursor": {
+        borderLeftColor: "var(--foreground)",
+      },
+      ".cm-selectionBackground, &.cm-focused .cm-selectionBackground, ::selection":
+        {
+          backgroundColor:
+            "color-mix(in srgb, var(--foreground) 18%, transparent) !important",
+        },
+      ".cm-panels": {
+        backgroundColor: "var(--popover)",
+        color: "var(--popover-foreground)",
+        borderColor: "var(--border)",
+      },
     }),
   ];
 }

@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { cn } from "@/lib/utils";
 import { fileIconUrl } from "@/modules/explorer/lib/iconResolver";
 import {
   Cancel01Icon,
@@ -8,6 +9,7 @@ import {
   PlusSignIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import { useEffect, useRef } from "react";
 import type { Tab } from "./lib/useTabs";
 
 type Props = {
@@ -16,63 +18,109 @@ type Props = {
   onSelect: (id: number) => void;
   onNew: () => void;
   onClose: (id: number) => void;
+  compact?: boolean;
 };
 
-export function TabBar({ tabs, activeId, onSelect, onNew, onClose }: Props) {
+export function TabBar({
+  tabs,
+  activeId,
+  onSelect,
+  onNew,
+  onClose,
+  compact,
+}: Props) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Horizontal wheel scroll without holding shift.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
+      if (el.scrollWidth <= el.clientWidth) return;
+      e.preventDefault();
+      el.scrollLeft += e.deltaY;
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, []);
+
+  // Keep the active tab visible after selection / open.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const active = el.querySelector<HTMLElement>(`[data-tab-id="${activeId}"]`);
+    active?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [activeId, tabs.length]);
+
   return (
-    <div className="flex min-w-0 items-center gap-1">
-      <Tabs
-        value={String(activeId)}
-        onValueChange={(v) => onSelect(Number(v))}
-        className="min-w-0 shrink"
-      >
-        <TabsList className="h-7 gap-0.5 bg-transparent p-0">
-          {tabs.map((t) => (
-            <TabsTrigger
-              key={t.id}
-              value={String(t.id)}
-              className="group h-7 gap-1.5 rounded-md px-2.5 text-xs text-muted-foreground transition-colors data-[state=active]:bg-accent data-[state=active]:text-foreground hover:text-foreground/80"
-            >
-              <span className="max-w-50 truncate flex items-center gap-2 px-4">
-                <TabIcon tab={t} active={t.id === activeId} />
-                {labelFor(t)}
-                {t.kind === "editor" && t.dirty && (
-                  <span
-                    aria-label="Unsaved changes"
-                    className="size-1.5 rounded-full bg-foreground/70"
-                  />
+    <div
+      ref={scrollRef}
+      data-tauri-drag-region
+      className="min-w-0 shrink overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+    >
+      <div className="flex w-max items-center gap-0.5">
+        <Tabs
+          value={String(activeId)}
+          onValueChange={(v) => onSelect(Number(v))}
+        >
+          <TabsList className="h-7 w-max gap-0.5 bg-transparent p-0">
+            {tabs.map((t) => (
+              <TabsTrigger
+                key={t.id}
+                value={String(t.id)}
+                data-tab-id={t.id}
+                className={cn(
+                  "group h-7 shrink-0 gap-1.5 rounded-md text-xs text-muted-foreground transition-colors data-[state=active]:bg-accent data-[state=active]:text-foreground hover:text-foreground/80",
+                  compact ? "px-2" : "px-2.5",
                 )}
-              </span>
-              {tabs.length > 1 && (
+              >
                 <span
-                  role="button"
-                  aria-label="Close tab"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onClose(t.id);
-                  }}
-                  className="rounded p-0.5 opacity-0 transition-opacity hover:bg-accent hover:opacity-100 group-hover:opacity-60"
+                  className={cn(
+                    "flex items-center gap-1.5 truncate",
+                    compact ? "max-w-32" : "max-w-56",
+                  )}
                 >
-                  <HugeiconsIcon
-                    icon={Cancel01Icon}
-                    size={11}
-                    strokeWidth={2}
-                  />
+                  <TabIcon tab={t} active={t.id === activeId} />
+                  <span className="truncate">{labelFor(t)}</span>
+                  {t.kind === "editor" && t.dirty && (
+                    <span
+                      aria-label="Unsaved changes"
+                      className="size-1.5 shrink-0 rounded-full bg-foreground/70"
+                    />
+                  )}
                 </span>
-              )}
-            </TabsTrigger>
-          ))}
-        </TabsList>
-      </Tabs>
-      <Button
-        variant="ghost"
-        size="icon"
-        className="size-7 shrink-0 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
-        onClick={onNew}
-        title="New tab (⌘T)"
-      >
-        <HugeiconsIcon icon={PlusSignIcon} size={14} strokeWidth={2} />
-      </Button>
+                {tabs.length > 1 && (
+                  <span
+                    role="button"
+                    aria-label="Close tab"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onClose(t.id);
+                    }}
+                    className="rounded p-0.5 opacity-0 transition-opacity hover:bg-accent hover:opacity-100 group-hover:opacity-60"
+                  >
+                    <HugeiconsIcon
+                      icon={Cancel01Icon}
+                      size={11}
+                      strokeWidth={2}
+                    />
+                  </span>
+                )}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="size-7 shrink-0 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+          onClick={onNew}
+          title="New tab (⌘T)"
+        >
+          <HugeiconsIcon icon={PlusSignIcon} size={14} strokeWidth={2} />
+        </Button>
+      </div>
     </div>
   );
 }
@@ -80,15 +128,14 @@ export function TabBar({ tabs, activeId, onSelect, onNew, onClose }: Props) {
 function TabIcon({ tab, active }: { tab: Tab; active: boolean }) {
   if (tab.kind === "editor") {
     const url = fileIconUrl(tab.title);
-    return url ? (
-      <img src={url} alt="" className="size-3.5 shrink-0" />
-    ) : null;
+    return url ? <img src={url} alt="" className="size-3.5 shrink-0" /> : null;
   }
   return (
     <HugeiconsIcon
       icon={active ? Folder02Icon : Folder01Icon}
       size={14}
       strokeWidth={2}
+      className="shrink-0"
     />
   );
 }

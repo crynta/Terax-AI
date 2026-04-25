@@ -1,23 +1,35 @@
-import { ThemeProvider } from "@/components/ThemeProvider";
 import {
   ResizableHandle,
   ResizablePanel,
   ResizablePanelGroup,
 } from "@/components/ui/resizable";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 import {
   AiInput,
   type AiInputHandle,
   AiSessionView,
   useSessions,
 } from "@/modules/ai";
-import { EditorPane } from "@/modules/editor";
+import { EditorStack, type EditorPaneHandle } from "@/modules/editor";
 import { FileExplorer } from "@/modules/explorer";
-import { Header, type SearchInlineHandle } from "@/modules/header";
-import { ShortcutsDialog } from "@/modules/shortcuts";
+import {
+  Header,
+  type SearchInlineHandle,
+  type SearchTarget,
+} from "@/modules/header";
+import {
+  ShortcutsDialog,
+  useGlobalShortcuts,
+  type ShortcutHandlers,
+} from "@/modules/shortcuts";
 import { StatusBar } from "@/modules/statusbar";
-import { useTabs } from "@/modules/tabs";
-import { TerminalPane, type TerminalPaneHandle } from "@/modules/terminal";
+import { useTabs, useWorkspaceCwd } from "@/modules/tabs";
+import {
+  TerminalStack,
+  type TerminalPaneHandle,
+} from "@/modules/terminal";
+import { ThemeProvider } from "@/modules/theme";
 import { homeDir } from "@tauri-apps/api/path";
 import type { SearchAddon } from "@xterm/addon-search";
 import { AnimatePresence, motion } from "motion/react";
@@ -41,6 +53,9 @@ export default function App() {
     useState<SearchAddon | null>(null);
   const searchInlineRef = useRef<SearchInlineHandle | null>(null);
   const terminalRefs = useRef<Map<number, TerminalPaneHandle>>(new Map());
+  const editorRefs = useRef<Map<number, EditorPaneHandle>>(new Map());
+  const [activeEditorHandle, setActiveEditorHandle] =
+    useState<EditorPaneHandle | null>(null);
   const aiInputRef = useRef<AiInputHandle | null>(null);
 
   const sidebarRef = useRef<PanelImperativeHandle | null>(null);
@@ -67,8 +82,15 @@ export default function App() {
   const isTerminalTab = activeTab?.kind === "terminal";
   const isEditorTab = activeTab?.kind === "editor";
 
+  const { explorerRoot, inheritedCwdForNewTab } = useWorkspaceCwd(
+    activeTab,
+    tabs,
+    home,
+  );
+
   useEffect(() => {
     setActiveSearchAddon(searchAddons.current.get(activeId) ?? null);
+    setActiveEditorHandle(editorRefs.current.get(activeId) ?? null);
   }, [activeId]);
 
   const handleSearchReady = useCallback(
@@ -77,6 +99,17 @@ export default function App() {
       if (id === activeId) setActiveSearchAddon(addon);
     },
     [activeId],
+  );
+
+  const disposeTab = useCallback(
+    (id: number) => {
+      searchAddons.current.delete(id);
+      terminalRefs.current.delete(id);
+      editorRefs.current.delete(id);
+      sessions.clear(id);
+      closeTab(id);
+    },
+    [closeTab, sessions],
   );
 
   const handleClose = useCallback(
@@ -88,12 +121,9 @@ export default function App() {
         );
         if (!ok) return;
       }
-      searchAddons.current.delete(id);
-      terminalRefs.current.delete(id);
-      sessions.clear(id);
-      closeTab(id);
+      disposeTab(id);
     },
-    [tabs, closeTab, sessions],
+    [tabs, disposeTab],
   );
 
   const cycleTab = useCallback(
@@ -115,15 +145,8 @@ export default function App() {
   }, []);
 
   const openNewTab = useCallback(() => {
-    const inheritedTab = tabs.find(
-      (t) => t.id === activeId && t.kind === "terminal",
-    );
-    const inherited =
-      (inheritedTab?.kind === "terminal" ? inheritedTab.cwd : undefined) ??
-      home ??
-      undefined;
-    newTab(inherited);
-  }, [tabs, activeId, home, newTab]);
+    newTab(inheritedCwdForNewTab());
+  }, [newTab, inheritedCwdForNewTab]);
 
   const sendCd = useCallback(
     (path: string) => {
@@ -136,6 +159,24 @@ export default function App() {
       term.focus();
     },
     [activeId],
+  );
+
+  const cdInNewTab = useCallback(
+    (path: string) => {
+      const id = newTab(path);
+      // After mount, send cd so the prompt reflects the directory immediately
+      // even if the shell init didn't pick up the spawn cwd cleanly.
+      setTimeout(() => {
+        const t = terminalRefs.current.get(id);
+        if (!t) return;
+        const quoted = path.includes(" ")
+          ? `'${path.replace(/'/g, `'\\''`)}'`
+          : path;
+        t.write(`cd ${quoted}\n`);
+        t.focus();
+      }, 80);
+    },
+    [newTab],
   );
 
   const handleAiSubmit = useCallback(
@@ -152,20 +193,6 @@ export default function App() {
     [openFileTab],
   );
 
-  // Explorer root follows the active tab's working directory. For terminal
-  // tabs: the tracked cwd. For editor tabs: the file's parent directory. If
-  // neither is known yet, fall back to the most recent terminal cwd, then home.
-  const explorerRoot = useMemo<string | null>(() => {
-    if (activeTab?.kind === "terminal" && activeTab.cwd) return activeTab.cwd;
-    if (activeTab?.kind === "editor") {
-      const i = activeTab.path.lastIndexOf("/");
-      return i <= 0 ? "/" : activeTab.path.slice(0, i);
-    }
-    const anyTerm = tabs.find((t) => t.kind === "terminal" && t.cwd);
-    if (anyTerm?.kind === "terminal" && anyTerm.cwd) return anyTerm.cwd;
-    return home;
-  }, [activeTab, tabs, home]);
-
   const handlePathRenamed = useCallback(
     (from: string, to: string) => {
       for (const t of tabs) {
@@ -174,7 +201,6 @@ export default function App() {
           const i = to.lastIndexOf("/");
           updateTab(t.id, { path: to, title: i === -1 ? to : to.slice(i + 1) });
         } else if (t.path.startsWith(`${from}/`)) {
-          // Tab under a renamed directory — remap the prefix.
           const suffix = t.path.slice(from.length);
           const newPath = `${to}${suffix}`;
           const i = newPath.lastIndexOf("/");
@@ -193,118 +219,75 @@ export default function App() {
       for (const t of tabs) {
         if (t.kind !== "editor") continue;
         if (t.path === path || t.path.startsWith(`${path}/`)) {
-          // Force-close without dirty prompt: the file is gone.
-          searchAddons.current.delete(t.id);
-          terminalRefs.current.delete(t.id);
-          sessions.clear(t.id);
-          closeTab(t.id);
+          disposeTab(t.id);
         }
       }
     },
-    [tabs, closeTab, sessions],
+    [tabs, disposeTab],
   );
 
   const activeFilePath =
     activeTab?.kind === "editor" ? activeTab.path : null;
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const mod = e.metaKey || e.ctrlKey;
-      const ctrl = e.ctrlKey;
-      const consume = () => {
-        e.preventDefault();
-        e.stopImmediatePropagation();
-      };
-
-      if (ctrl && e.key === "Tab") {
-        consume();
-        cycleTab(e.shiftKey ? -1 : 1);
-        return;
-      }
-      if (!mod) return;
-
-      if (e.key === "t") {
-        consume();
-        openNewTab();
-      } else if (e.key === "w") {
-        consume();
-        handleClose(activeId);
-      } else if (e.key === "f") {
-        // Let CodeMirror's own search handle Cmd+F on editor tabs.
-        if (isEditorTab) return;
-        consume();
-        searchInlineRef.current?.focus();
-      } else if (e.key === "i") {
-        consume();
-        toggleAi();
-      } else if (e.key === "k") {
-        consume();
-        setShortcutsOpen((v) => !v);
-      } else if (e.key === "b") {
-        consume();
-        toggleSidebar();
-      } else if (/^[1-9]$/.test(e.key)) {
-        consume();
-        selectByIndex(parseInt(e.key, 10) - 1);
-      }
-    };
-    window.addEventListener("keydown", onKey, { capture: true });
-    return () =>
-      window.removeEventListener("keydown", onKey, { capture: true });
-  }, [
-    activeId,
-    cycleTab,
-    handleClose,
-    openNewTab,
-    selectByIndex,
-    toggleAi,
-    toggleSidebar,
-    isEditorTab,
-  ]);
-
-  // Terminal panes stay mounted to preserve PTY state; only the active one is visible.
-  const terminalStack = useMemo(
-    () => (
-      <div className="relative h-full w-full">
-        {tabs
-          .filter((t) => t.kind === "terminal")
-          .map((t) => (
-            <div key={t.id} className="absolute inset-0">
-              <TerminalPane
-                tabId={t.id}
-                visible={t.id === activeId}
-                initialCwd={t.kind === "terminal" ? t.cwd : undefined}
-                ref={(h) => {
-                  if (h) terminalRefs.current.set(t.id, h);
-                  else terminalRefs.current.delete(t.id);
-                }}
-                onSearchReady={handleSearchReady}
-                onCwd={(id, cwd) => updateTab(id, { cwd })}
-              />
-            </div>
-          ))}
-      </div>
-    ),
-    [tabs, activeId, handleSearchReady, updateTab],
+  const shortcutHandlers = useMemo<ShortcutHandlers>(
+    () => ({
+      "tab.new": openNewTab,
+      "tab.close": () => handleClose(activeId),
+      "tab.next": () => cycleTab(1),
+      "tab.prev": () => cycleTab(-1),
+      "tab.selectByIndex": (e) => selectByIndex(parseInt(e.key, 10) - 1),
+      "search.focus": () => searchInlineRef.current?.focus(),
+      "ai.toggle": toggleAi,
+      "shortcuts.open": () => setShortcutsOpen((v) => !v),
+      "sidebar.toggle": toggleSidebar,
+    }),
+    [
+      activeId,
+      cycleTab,
+      handleClose,
+      openNewTab,
+      selectByIndex,
+      toggleAi,
+      toggleSidebar,
+    ],
   );
 
-  const mainContent = useMemo(() => {
-    if (!activeTab) return null;
-    if (activeTab.kind === "editor") {
-      return (
-        <div className="h-full px-3 pt-2 pb-2">
-          <div className="h-full overflow-hidden rounded-md border border-border/60 bg-background">
-            <EditorPane
-              key={activeTab.id}
-              path={activeTab.path}
-              onDirtyChange={(dirty) => updateTab(activeTab.id, { dirty })}
-            />
-          </div>
-        </div>
-      );
-    }
-    return <div className="h-full px-3 pt-2 pb-2">{terminalStack}</div>;
-  }, [activeTab, terminalStack, updateTab]);
+  useGlobalShortcuts(shortcutHandlers);
+
+  const registerTerminalHandle = useCallback(
+    (id: number, h: TerminalPaneHandle | null) => {
+      if (h) terminalRefs.current.set(id, h);
+      else terminalRefs.current.delete(id);
+    },
+    [],
+  );
+
+  const registerEditorHandle = useCallback(
+    (id: number, h: EditorPaneHandle | null) => {
+      if (h) editorRefs.current.set(id, h);
+      else editorRefs.current.delete(id);
+      if (id === activeId) setActiveEditorHandle(h);
+    },
+    [activeId],
+  );
+
+  const handleTerminalCwd = useCallback(
+    (id: number, cwd: string) => updateTab(id, { cwd }),
+    [updateTab],
+  );
+
+  const handleEditorDirty = useCallback(
+    (id: number, dirty: boolean) => updateTab(id, { dirty }),
+    [updateTab],
+  );
+
+  const searchTarget = useMemo<SearchTarget>(() => {
+    if (isTerminalTab && activeSearchAddon)
+      return { kind: "terminal", addon: activeSearchAddon };
+    if (isEditorTab && activeEditorHandle)
+      return { kind: "editor", handle: activeEditorHandle };
+    return null;
+  }, [isTerminalTab, isEditorTab, activeSearchAddon, activeEditorHandle]);
 
   const activeCwd =
     activeTab?.kind === "terminal" ? (activeTab.cwd ?? null) : null;
@@ -312,7 +295,7 @@ export default function App() {
   return (
     <ThemeProvider>
       <TooltipProvider>
-        <div className="dark relative flex h-screen flex-col overflow-hidden bg-background text-foreground">
+        <div className="relative flex h-screen flex-col overflow-hidden bg-background text-foreground">
           <Header
             tabs={tabs}
             activeId={activeId}
@@ -322,7 +305,7 @@ export default function App() {
             onToggleSidebar={toggleSidebar}
             onOpenShortcuts={() => setShortcutsOpen(true)}
             onOpenSettings={() => {}}
-            searchAddon={isTerminalTab ? activeSearchAddon : null}
+            searchTarget={searchTarget}
             searchRef={searchInlineRef}
           />
 
@@ -346,6 +329,7 @@ export default function App() {
                     onOpenFile={handleOpenFile}
                     onPathRenamed={handlePathRenamed}
                     onPathDeleted={handlePathDeleted}
+                    onRevealInTerminal={cdInNewTab}
                   />
                 </div>
               </ResizablePanel>
@@ -366,7 +350,37 @@ export default function App() {
                     }
                     minSize={25}
                   >
-                    {mainContent}
+                    <div className="relative h-full">
+                      <div
+                        className={cn(
+                          "absolute inset-0 px-3 pt-2 pb-2",
+                          !isTerminalTab && "invisible pointer-events-none",
+                        )}
+                        aria-hidden={!isTerminalTab}
+                      >
+                        <TerminalStack
+                          tabs={tabs}
+                          activeId={activeId}
+                          registerHandle={registerTerminalHandle}
+                          onSearchReady={handleSearchReady}
+                          onCwd={handleTerminalCwd}
+                        />
+                      </div>
+                      <div
+                        className={cn(
+                          "absolute inset-0 px-3 pt-2 pb-2",
+                          !isEditorTab && "invisible pointer-events-none",
+                        )}
+                        aria-hidden={!isEditorTab}
+                      >
+                        <EditorStack
+                          tabs={tabs}
+                          activeId={activeId}
+                          registerHandle={registerEditorHandle}
+                          onDirtyChange={handleEditorDirty}
+                        />
+                      </div>
+                    </div>
                   </ResizablePanel>
                   {aiOpen && activeSession && isTerminalTab ? (
                     <>

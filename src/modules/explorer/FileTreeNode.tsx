@@ -9,8 +9,14 @@ import { cn } from "@/lib/utils";
 import { ArrowRight01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { memo, useCallback } from "react";
-import { fileIconUrl, folderIconUrl } from "./lib/iconResolver";
 import { InlineInput } from "./InlineInput";
+import {
+  copyToClipboard,
+  relativePath,
+  revealInFinder,
+} from "./lib/contextActions";
+import { fileIconUrl, folderIconUrl } from "./lib/iconResolver";
+import { COMPACT_CONTENT, COMPACT_ITEM } from "./lib/menuItemClass";
 import type { DirEntry, useFileTree } from "./lib/useFileTree";
 
 type Tree = ReturnType<typeof useFileTree>;
@@ -18,17 +24,23 @@ type Tree = ReturnType<typeof useFileTree>;
 type Props = {
   entry: DirEntry;
   parentPath: string;
+  rootPath: string;
   depth: number;
   tree: Tree;
   onOpenFile: (path: string) => void;
+  onRevealInTerminal?: (path: string) => void;
+  onAttachToAgent?: (path: string) => void;
 };
 
 function FileTreeNodeImpl({
   entry,
   parentPath,
+  rootPath,
   depth,
   tree,
   onOpenFile,
+  onRevealInTerminal,
+  onAttachToAgent,
 }: Props) {
   const path = tree.joinPath(parentPath, entry.name);
   const isDir = entry.kind === "dir";
@@ -47,14 +59,12 @@ function FileTreeNodeImpl({
   }, [isDir, path, tree, onOpenFile]);
 
   const pendingInThisDir =
-    isDir &&
-    isExpanded &&
-    tree.pendingCreate?.parentPath === path
+    isDir && isExpanded && tree.pendingCreate?.parentPath === path
       ? tree.pendingCreate
       : null;
 
-  // Context menu is placed on the row itself; for a directory, New File /
-  // New Folder target that directory. For a file, they target its parent.
+  // Context menu placement: directory targets itself for new file/folder;
+  // a file targets its parent.
   const createTarget = isDir ? path : parentPath;
 
   return (
@@ -84,7 +94,7 @@ function FileTreeNodeImpl({
               onClick={handleClick}
               onDoubleClick={() => !isDir && tree.beginRename(path)}
               className={cn(
-                "group flex w-full items-center gap-1.5 rounded-sm px-1.5 py-0.5 text-left text-xs text-foreground/85 transition-colors hover:bg-accent/70",
+                "group flex w-full items-center gap-1.5 rounded-sm px-1.5 py-0.5 text-left text-xs text-foreground/85 transition-colors hover:bg-accent/70 cursor-pointer",
               )}
               style={{ paddingLeft: 6 + depth * 12 }}
             >
@@ -110,22 +120,71 @@ function FileTreeNodeImpl({
             </button>
           )}
         </ContextMenuTrigger>
-        <ContextMenuContent className="w-44">
+        <ContextMenuContent className={COMPACT_CONTENT}>
+          {!isDir && (
+            <ContextMenuItem
+              className={COMPACT_ITEM}
+              onSelect={() => onOpenFile(path)}
+            >
+              Open
+            </ContextMenuItem>
+          )}
+          {isDir && onRevealInTerminal && (
+            <ContextMenuItem
+              className={COMPACT_ITEM}
+              onSelect={() => onRevealInTerminal(path)}
+            >
+              Open in Terminal
+            </ContextMenuItem>
+          )}
           <ContextMenuItem
+            className={COMPACT_ITEM}
+            onSelect={() => void revealInFinder(path)}
+          >
+            Reveal in Finder
+          </ContextMenuItem>
+          <ContextMenuSeparator />
+          <ContextMenuItem
+            className={COMPACT_ITEM}
             onSelect={() => tree.beginCreate(createTarget, "file")}
           >
             New File
           </ContextMenuItem>
           <ContextMenuItem
+            className={COMPACT_ITEM}
             onSelect={() => tree.beginCreate(createTarget, "dir")}
           >
             New Folder
           </ContextMenuItem>
           <ContextMenuSeparator />
-          <ContextMenuItem onSelect={() => tree.beginRename(path)}>
+          <ContextMenuItem
+            className={COMPACT_ITEM}
+            onSelect={() => void copyToClipboard(path)}
+          >
+            Copy Path
+          </ContextMenuItem>
+          <ContextMenuItem
+            className={COMPACT_ITEM}
+            onSelect={() => void copyToClipboard(relativePath(rootPath, path))}
+          >
+            Copy Relative Path
+          </ContextMenuItem>
+          <ContextMenuSeparator />
+          <ContextMenuItem
+            className={COMPACT_ITEM}
+            onSelect={() => onAttachToAgent?.(path)}
+          >
+            Attach to Agent
+          </ContextMenuItem>
+          <ContextMenuSeparator />
+          <ContextMenuItem
+            className={COMPACT_ITEM}
+            onSelect={() => tree.beginRename(path)}
+          >
             Rename
           </ContextMenuItem>
           <ContextMenuItem
+            className={COMPACT_ITEM}
             variant="destructive"
             onSelect={() => {
               if (
@@ -184,9 +243,12 @@ function FileTreeNodeImpl({
             key={child.name}
             entry={child}
             parentPath={path}
+            rootPath={rootPath}
             depth={depth + 1}
             tree={tree}
             onOpenFile={onOpenFile}
+            onRevealInTerminal={onRevealInTerminal}
+            onAttachToAgent={onAttachToAgent}
           />
         ))}
     </>

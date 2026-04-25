@@ -1,3 +1,12 @@
+/**
+ * Single source of truth for keyboard shortcuts. Each entry carries:
+ * - `keys`: display tokens for the cheat-sheet dialog.
+ * - `match`: predicate over the live KeyboardEvent used by `useGlobalShortcuts`.
+ *
+ * Keeping both on the same record means the dialog can never lie about a
+ * binding the runtime no longer matches (or vice-versa).
+ */
+
 export type ShortcutId =
   | "tab.new"
   | "tab.close"
@@ -6,24 +15,92 @@ export type ShortcutId =
   | "tab.selectByIndex"
   | "search.focus"
   | "ai.toggle"
-  | "shortcuts.open";
+  | "shortcuts.open"
+  | "sidebar.toggle";
+
+export type ShortcutGroup = "General" | "Tabs" | "Search" | "AI" | "View";
 
 export type Shortcut = {
   id: ShortcutId;
   label: string;
   keys: string[];
-  group: "General" | "Tabs" | "Search" | "AI";
+  group: ShortcutGroup;
+  match: (e: KeyboardEvent) => boolean;
 };
 
+const isMod = (e: KeyboardEvent) => e.metaKey || e.ctrlKey;
+
 export const SHORTCUTS: Shortcut[] = [
-  { id: "shortcuts.open", label: "Show keyboard shortcuts", keys: ["⌘", "K"], group: "General" },
-  { id: "tab.new", label: "New tab", keys: ["⌘", "T"], group: "Tabs" },
-  { id: "tab.close", label: "Close tab", keys: ["⌘", "W"], group: "Tabs" },
-  { id: "tab.next", label: "Next tab", keys: ["⌃", "⇥"], group: "Tabs" },
-  { id: "tab.prev", label: "Previous tab", keys: ["⌃", "⇧", "⇥"], group: "Tabs" },
-  { id: "tab.selectByIndex", label: "Jump to tab 1–9", keys: ["⌘", "1…9"], group: "Tabs" },
-  { id: "search.focus", label: "Find in terminal", keys: ["⌘", "F"], group: "Search" },
-  { id: "ai.toggle", label: "Toggle AI agent", keys: ["⌘", "I"], group: "AI" },
+  {
+    id: "shortcuts.open",
+    label: "Show keyboard shortcuts",
+    keys: ["⌘", "K"],
+    group: "General",
+    match: (e) => isMod(e) && e.key.toLowerCase() === "k",
+  },
+  {
+    id: "tab.new",
+    label: "New tab",
+    keys: ["⌘", "T"],
+    group: "Tabs",
+    match: (e) => isMod(e) && e.key.toLowerCase() === "t",
+  },
+  {
+    id: "tab.close",
+    label: "Close tab",
+    keys: ["⌘", "W"],
+    group: "Tabs",
+    match: (e) => isMod(e) && e.key.toLowerCase() === "w",
+  },
+  {
+    id: "tab.next",
+    label: "Next tab",
+    keys: ["⌃", "⇥"],
+    group: "Tabs",
+    // Ctrl+Tab is conventionally Ctrl-only on every platform (including macOS).
+    match: (e) => e.ctrlKey && !e.shiftKey && e.key === "Tab",
+  },
+  {
+    id: "tab.prev",
+    label: "Previous tab",
+    keys: ["⌃", "⇧", "⇥"],
+    group: "Tabs",
+    match: (e) => e.ctrlKey && e.shiftKey && e.key === "Tab",
+  },
+  {
+    id: "tab.selectByIndex",
+    label: "Jump to tab 1–9",
+    keys: ["⌘", "1…9"],
+    group: "Tabs",
+    match: (e) => isMod(e) && /^[1-9]$/.test(e.key),
+  },
+  {
+    id: "search.focus",
+    label: "Find in terminal",
+    keys: ["⌘", "F"],
+    group: "Search",
+    match: (e) => isMod(e) && e.key.toLowerCase() === "f",
+  },
+  {
+    id: "ai.toggle",
+    label: "Toggle AI agent",
+    keys: ["⌘", "I"],
+    group: "AI",
+    match: (e) => isMod(e) && e.key.toLowerCase() === "i",
+  },
+  {
+    id: "sidebar.toggle",
+    label: "Toggle file explorer",
+    keys: ["⌘", "B"],
+    group: "View",
+    match: (e) => isMod(e) && e.key.toLowerCase() === "b",
+  },
 ];
 
-export const SHORTCUT_GROUPS = ["General", "Tabs", "Search", "AI"] as const;
+export const SHORTCUT_GROUPS: ShortcutGroup[] = [
+  "General",
+  "Tabs",
+  "View",
+  "Search",
+  "AI",
+];

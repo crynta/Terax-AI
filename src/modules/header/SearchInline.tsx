@@ -1,74 +1,193 @@
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Search01Icon } from "@hugeicons/core-free-icons";
+import type { EditorPaneHandle } from "@/modules/editor";
+import { Cancel01Icon, Search01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import type { SearchAddon } from "@xterm/addon-search";
-import { forwardRef, useImperativeHandle, useRef, useState } from "react";
+import { AnimatePresence, motion } from "motion/react";
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+} from "react";
 
-const DECORATIONS = {
+const TERM_DECORATIONS = {
   matchBackground: "#515c6a",
   activeMatchBackground: "#d18616",
   matchOverviewRuler: "#d18616",
   activeMatchColorOverviewRuler: "#d18616",
 };
 
+export type SearchTarget =
+  | { kind: "terminal"; addon: SearchAddon }
+  | { kind: "editor"; handle: EditorPaneHandle }
+  | null;
+
 export type SearchInlineHandle = { focus: () => void };
 
-type Props = { addon: SearchAddon | null };
+type Props = {
+  target: SearchTarget;
+  /** When true, collapse to an icon-only button until the user opens it. */
+  compact?: boolean;
+};
 
 export const SearchInline = forwardRef<SearchInlineHandle, Props>(
-  function SearchInline({ addon }, ref) {
+  function SearchInline({ target, compact }, ref) {
     const [q, setQ] = useState("");
+    // In compact mode the field is hidden behind an icon until activated.
+    // In normal mode the field is always present.
+    const [openInCompact, setOpenInCompact] = useState(false);
     const inputRef = useRef<HTMLInputElement>(null);
 
-    useImperativeHandle(ref, () => ({
-      focus: () => inputRef.current?.focus(),
-    }));
+    const expanded = !compact || openInCompact;
 
-    const find = (forward: boolean) => {
-      if (!addon || !q) return;
-      const opts = { decorations: DECORATIONS };
-      if (forward) addon.findNext(q, opts);
-      else addon.findPrevious(q, opts);
+    const focus = useCallback(() => {
+      if (compact) setOpenInCompact(true);
+      requestAnimationFrame(() => inputRef.current?.focus());
+    }, [compact]);
+
+    useImperativeHandle(ref, () => ({ focus }), [focus]);
+
+    const clearTarget = useCallback(() => {
+      if (!target) return;
+      if (target.kind === "terminal") target.addon.clearDecorations();
+      else target.handle.clearQuery();
+    }, [target]);
+
+    // Target switched (terminal ↔ editor) or removed → drop highlights.
+    useEffect(() => clearTarget, [clearTarget]);
+
+    const applyIncremental = (next: string) => {
+      if (!target) return;
+      if (target.kind === "terminal") {
+        if (next) {
+          target.addon.findNext(next, {
+            incremental: true,
+            decorations: TERM_DECORATIONS,
+          });
+        } else {
+          target.addon.clearDecorations();
+        }
+      } else {
+        target.handle.setQuery(next);
+      }
+    };
+
+    const findDirection = (forward: boolean) => {
+      if (!target || !q) return;
+      if (target.kind === "terminal") {
+        const opts = { decorations: TERM_DECORATIONS };
+        if (forward) target.addon.findNext(q, opts);
+        else target.addon.findPrevious(q, opts);
+      } else {
+        if (forward) target.handle.findNext();
+        else target.handle.findPrevious();
+      }
     };
 
     return (
-      <div className="relative hidden sm:block">
-        <HugeiconsIcon
-          icon={Search01Icon}
-          size={13}
-          strokeWidth={1.75}
-          className="pointer-events-none absolute top-1/2 left-2 -translate-y-1/2 text-muted-foreground"
-        />
-        <Input
-          ref={inputRef}
-          value={q}
-          placeholder="Search"
-          className="h-7 w-32 bg-muted/60 pr-14 pl-7 text-xs placeholder:text-muted-foreground/70 focus-visible:ring-0 md:w-44"
-          onChange={(e) => {
-            const next = e.target.value;
-            setQ(next);
-            if (addon && next) {
-              addon.findNext(next, {
-                incremental: true,
-                decorations: DECORATIONS,
-              });
-            } else {
-              addon?.clearDecorations();
-            }
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              find(!e.shiftKey);
-            } else if (e.key === "Escape") {
-              e.preventDefault();
-              addon?.clearDecorations();
-              inputRef.current?.blur();
-              setQ("");
-            }
-          }}
-        />
-      </div>
+      <motion.div
+        layout
+        initial={false}
+        animate={{ width: expanded ? 192 : 28 }}
+        transition={{ type: "spring", stiffness: 380, damping: 34 }}
+        className="relative h-7 shrink-0"
+      >
+        <AnimatePresence initial={false} mode="wait">
+          {expanded ? (
+            <motion.div
+              key="input"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.12 }}
+              className="absolute inset-0"
+            >
+              <HugeiconsIcon
+                icon={Search01Icon}
+                size={13}
+                strokeWidth={1.75}
+                className="pointer-events-none absolute top-1/2 left-2 -translate-y-1/2 text-muted-foreground"
+              />
+              <Input
+                ref={inputRef}
+                value={q}
+                placeholder={
+                  target?.kind === "editor" ? "Search in file" : "Search"
+                }
+                className="h-7 w-full bg-muted/60 pr-7 pl-7 text-xs placeholder:text-muted-foreground/70 focus-visible:ring-0"
+                onChange={(e) => {
+                  const next = e.target.value;
+                  setQ(next);
+                  applyIncremental(next);
+                }}
+                onBlur={() => {
+                  if (compact && !q) setOpenInCompact(false);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    findDirection(!e.shiftKey);
+                  } else if (e.key === "Escape") {
+                    e.preventDefault();
+                    clearTarget();
+                    setQ("");
+                    if (compact) {
+                      setOpenInCompact(false);
+                    } else {
+                      inputRef.current?.blur();
+                    }
+                  }
+                }}
+              />
+              {q && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setQ("");
+                    clearTarget();
+                    inputRef.current?.focus();
+                  }}
+                  className="absolute top-1/2 right-1.5 -translate-y-1/2 rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+                  aria-label="Clear search"
+                >
+                  <HugeiconsIcon
+                    icon={Cancel01Icon}
+                    size={11}
+                    strokeWidth={2}
+                  />
+                </button>
+              )}
+            </motion.div>
+          ) : (
+            <motion.div
+              key="icon"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.12 }}
+              className="absolute inset-0 flex items-center justify-end"
+            >
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-7 shrink-0 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+                onClick={focus}
+                title="Search (⌘F)"
+              >
+                <HugeiconsIcon
+                  icon={Search01Icon}
+                  size={15}
+                  strokeWidth={1.75}
+                />
+              </Button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </motion.div>
     );
   },
 );

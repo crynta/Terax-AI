@@ -5,3 +5,4 @@ export {
   type TerminalTab,
   type EditorTab,
 } from "./lib/useTabs";
+export { useWorkspaceCwd } from "./lib/useWorkspaceCwd";

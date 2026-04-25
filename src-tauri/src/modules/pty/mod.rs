@@ -12,10 +12,20 @@ use tauri::ipc::Channel;
 pub use session::PtyEvent;
 use session::Session;
 
-#[derive(Default)]
 pub struct PtyState {
     sessions: RwLock<HashMap<u32, Arc<Session>>>,
+    // Starts at 1 so freshly-handed-out ids are never 0, which the frontend
+    // sometimes treats as "unset". Increments monotonically; never reused.
     next_id: AtomicU32,
+}
+
+impl Default for PtyState {
+    fn default() -> Self {
+        Self {
+            sessions: RwLock::new(HashMap::new()),
+            next_id: AtomicU32::new(1),
+        }
+    }
 }
 
 #[tauri::command]
@@ -30,7 +40,7 @@ pub fn pty_open(
         log::error!("pty_open failed: {e}");
         e
     })?;
-    let id = state.next_id.fetch_add(1, Ordering::Relaxed) + 1;
+    let id = state.next_id.fetch_add(1, Ordering::Relaxed);
     state.sessions.write().unwrap().insert(id, session);
     log::info!("pty opened id={id} cols={cols} rows={rows}");
     Ok(id)

@@ -3,6 +3,7 @@ import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
+  ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -10,11 +11,16 @@ import {
   FileAddIcon,
   Folder01Icon,
   FolderAddIcon,
-  RefreshIcon,
+  Refresh01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { FileTreeNode } from "./FileTreeNode";
 import { InlineInput } from "./InlineInput";
+import {
+  copyToClipboard,
+  revealInFinder,
+} from "./lib/contextActions";
+import { COMPACT_CONTENT, COMPACT_ITEM } from "./lib/menuItemClass";
 import { useFileTree } from "./lib/useFileTree";
 
 type Props = {
@@ -22,6 +28,8 @@ type Props = {
   onOpenFile: (path: string) => void;
   onPathRenamed?: (from: string, to: string) => void;
   onPathDeleted?: (path: string) => void;
+  onRevealInTerminal?: (path: string) => void;
+  onAttachToAgent?: (path: string) => void;
 };
 
 function basename(path: string): string {
@@ -34,6 +42,8 @@ export function FileExplorer({
   onOpenFile,
   onPathRenamed,
   onPathDeleted,
+  onRevealInTerminal,
+  onAttachToAgent,
 }: Props) {
   const tree = useFileTree(rootPath, { onPathRenamed, onPathDeleted });
 
@@ -55,9 +65,7 @@ export function FileExplorer({
 
   const root = tree.nodes[rootPath];
   const pendingAtRoot =
-    tree.pendingCreate?.parentPath === rootPath
-      ? tree.pendingCreate
-      : null;
+    tree.pendingCreate?.parentPath === rootPath ? tree.pendingCreate : null;
 
   return (
     <div className="flex h-full flex-col">
@@ -93,7 +101,7 @@ export function FileExplorer({
           onClick={() => tree.refresh(rootPath)}
           title="Refresh"
         >
-          <HugeiconsIcon icon={RefreshIcon} size={12} strokeWidth={2} />
+          <HugeiconsIcon icon={Refresh01Icon} size={12} strokeWidth={2} />
         </Button>
       </div>
 
@@ -134,22 +142,57 @@ export function FileExplorer({
                     key={entry.name}
                     entry={entry}
                     parentPath={rootPath}
+                    rootPath={rootPath}
                     depth={0}
                     tree={tree}
                     onOpenFile={onOpenFile}
+                    onRevealInTerminal={onRevealInTerminal}
+                    onAttachToAgent={onAttachToAgent}
                   />
                 ))}
             </div>
           </ScrollArea>
         </ContextMenuTrigger>
-        <ContextMenuContent className="w-44">
+        <ContextMenuContent className={COMPACT_CONTENT}>
+          {onRevealInTerminal && (
+            <ContextMenuItem
+              className={COMPACT_ITEM}
+              onSelect={() => onRevealInTerminal(rootPath)}
+            >
+              Open in Terminal
+            </ContextMenuItem>
+          )}
           <ContextMenuItem
+            className={COMPACT_ITEM}
+            onSelect={() => void revealInFinder(rootPath)}
+          >
+            Reveal in Finder
+          </ContextMenuItem>
+          <ContextMenuSeparator />
+          <ContextMenuItem
+            className={COMPACT_ITEM}
             onSelect={() => tree.beginCreate(rootPath, "file")}
           >
             New File
           </ContextMenuItem>
-          <ContextMenuItem onSelect={() => tree.beginCreate(rootPath, "dir")}>
+          <ContextMenuItem
+            className={COMPACT_ITEM}
+            onSelect={() => tree.beginCreate(rootPath, "dir")}
+          >
             New Folder
+          </ContextMenuItem>
+          <ContextMenuSeparator />
+          <ContextMenuItem
+            className={COMPACT_ITEM}
+            onSelect={() => void copyToClipboard(rootPath)}
+          >
+            Copy Path
+          </ContextMenuItem>
+          <ContextMenuItem
+            className={COMPACT_ITEM}
+            onSelect={() => tree.refresh(rootPath)}
+          >
+            Refresh
           </ContextMenuItem>
         </ContextMenuContent>
       </ContextMenu>

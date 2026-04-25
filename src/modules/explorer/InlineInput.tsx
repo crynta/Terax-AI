@@ -25,11 +25,17 @@ export function InlineInput({
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    el.focus();
-    // Select up to the extension so typing replaces the basename cleanly.
-    const dot = initial.lastIndexOf(".");
-    if (dot > 0) el.setSelectionRange(0, dot);
-    else el.select();
+    // Two-tick focus to win against parent click handlers and Radix portal
+    // restorations that can steal focus right after mount.
+    const focus = () => {
+      el.focus({ preventScroll: false });
+      const dot = initial.lastIndexOf(".");
+      if (dot > 0) el.setSelectionRange(0, dot);
+      else el.select();
+    };
+    focus();
+    const raf = requestAnimationFrame(focus);
+    return () => cancelAnimationFrame(raf);
   }, [initial]);
 
   const commit = () => {
