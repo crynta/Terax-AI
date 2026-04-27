@@ -1,11 +1,11 @@
 import { tool } from "ai";
 import { z } from "zod";
-import { native } from "./native";
+import { native } from "../lib/native";
 import {
   checkReadable,
   checkShellCommand,
   checkWritable,
-} from "./security";
+} from "../lib/security";
 
 /**
  * AI tool definitions.
@@ -32,7 +32,8 @@ export type ToolContext = {
 };
 
 function resolvePath(rawPath: string, cwd: string | null): string {
-  if (rawPath.startsWith("/") || /^[a-zA-Z]:[\\/]/.test(rawPath)) return rawPath;
+  if (rawPath.startsWith("/") || /^[a-zA-Z]:[\\/]/.test(rawPath))
+    return rawPath;
   if (!cwd) throw new Error("relative path requires an active terminal cwd");
   const sep = cwd.includes("\\") && !cwd.includes("/") ? "\\" : "/";
   return cwd.endsWith(sep) ? `${cwd}${rawPath}` : `${cwd}${sep}${rawPath}`;
@@ -54,7 +55,8 @@ export function buildTools(ctx: ToolContext) {
         if (!safety.ok) return { error: safety.reason, path: abs };
         try {
           const r = await native.readFile(abs);
-          if (r.kind === "text") return { path: abs, content: r.content, size: r.size };
+          if (r.kind === "text")
+            return { path: abs, content: r.content, size: r.size };
           if (r.kind === "binary")
             return { error: "binary file refused", path: abs, size: r.size };
           return {

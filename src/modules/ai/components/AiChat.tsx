@@ -22,7 +22,6 @@ import {
   ToolOutput,
 } from "@/components/ai-elements/tool";
 import { Spinner } from "@/components/ui/spinner";
-import { AiToolApproval } from "./AiToolApproval";
 import { AiBrain01Icon, AiMagicIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import type {
@@ -32,6 +31,7 @@ import type {
   UIMessage,
   UIMessagePart,
 } from "ai";
+import { AiToolApproval } from "./AiToolApproval";
 
 type AnyToolPart = ToolUIPart | DynamicToolUIPart;
 type AnyPart = UIMessagePart<Record<string, never>, Record<string, never>>;

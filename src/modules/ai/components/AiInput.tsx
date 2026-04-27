@@ -4,19 +4,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { ArrowUp01Icon, Square01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import {
-  forwardRef,
-  useImperativeHandle,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
-import { pickPlaceholder } from "./lib/placeholders";
-
-export type AiInputHandle = {
-  focus: () => void;
-  setValue: (v: string) => void;
-};
+import { useEffect, useMemo, useRef, useState } from "react";
+import { pickPlaceholder } from "../lib/placeholders";
+import { useChatStore } from "../store/chatStore";
 
 type Props = {
   onSubmit: (prompt: string) => void;
@@ -26,18 +16,30 @@ type Props = {
   busy?: boolean;
 };
 
-export const AiInput = forwardRef<AiInputHandle, Props>(function AiInput(
-  { onSubmit, onStop, onClose, disabled, busy },
-  ref,
-) {
+export function AiInput({ onSubmit, onStop, onClose, disabled, busy }: Props) {
   const [value, setValue] = useState("");
   const placeholder = useMemo(() => pickPlaceholder(), []);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const pendingPrefill = useChatStore((s) => s.pendingPrefill);
+  const consumePrefill = useChatStore((s) => s.consumePrefill);
 
-  useImperativeHandle(ref, () => ({
-    focus: () => textareaRef.current?.focus(),
-    setValue,
-  }));
+  useEffect(() => {
+    if (pendingPrefill == null) return;
+    const text = consumePrefill();
+    if (text) {
+      setValue(text);
+      requestAnimationFrame(() => {
+        const el = textareaRef.current;
+        if (!el) return;
+        el.focus();
+        el.setSelectionRange(el.value.length, el.value.length);
+      });
+    }
+  }, [pendingPrefill, consumePrefill]);
+
+  useEffect(() => {
+    requestAnimationFrame(() => textareaRef.current?.focus());
+  }, []);
 
   const submit = () => {
     if (busy) return;
@@ -100,4 +102,4 @@ export const AiInput = forwardRef<AiInputHandle, Props>(function AiInput(
       </div>
     </div>
   );
-});
+}

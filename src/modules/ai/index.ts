@@ -1,9 +1,10 @@
-export { AiInput, type AiInputHandle } from "./AiInput";
-export { AiPanel, type AiPanelHandle } from "./AiPanel";
+export { AiInput } from "./components/AiInput";
+export { AiPanel } from "./components/AiPanel";
+export { getOpenAiKey, hasOpenAiKey } from "./lib/keyring";
 export {
-  useChatStore,
+  dropChat,
   getOrCreateChat,
   sendToTab,
   stopTab,
-} from "./lib/chatStore";
-export { getOpenAiKey, hasOpenAiKey } from "./lib/keyring";
+  useChatStore,
+} from "./store/chatStore";

@@ -5,11 +5,7 @@ import {
 } from "@/components/ui/resizable";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import {
-  AiPanel,
-  type AiPanelHandle,
-  useChatStore,
-} from "@/modules/ai";
+import { AiPanel, dropChat, useChatStore } from "@/modules/ai";
 import { EditorStack, type EditorPaneHandle } from "@/modules/editor";
 import { FileExplorer } from "@/modules/explorer";
 import {
@@ -55,8 +51,6 @@ export default function App() {
   const editorRefs = useRef<Map<number, EditorPaneHandle>>(new Map());
   const [activeEditorHandle, setActiveEditorHandle] =
     useState<EditorPaneHandle | null>(null);
-  const aiPanelRef = useRef<AiPanelHandle | null>(null);
-
   const sidebarRef = useRef<PanelImperativeHandle | null>(null);
   const toggleSidebar = useCallback(() => {
     const p = sidebarRef.current;
@@ -72,9 +66,10 @@ export default function App() {
       .catch(() => setHome(null));
   }, []);
 
-  const [aiOpen, setAiOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
-  const dropChat = useChatStore((s) => s.drop);
+  const aiOpen = useChatStore((s) => s.panelOpen);
+  const togglePanel = useChatStore((s) => s.togglePanel);
+  const closePanel = useChatStore((s) => s.closePanel);
   const setLive = useChatStore((s) => s.setLive);
 
   const activeTab = tabs.find((t) => t.id === activeId);
@@ -148,25 +143,12 @@ export default function App() {
   }, [tabs, activeId]);
 
   const toggleAi = useCallback(() => {
-    setAiOpen((prev) => {
-      const next = !prev;
-      if (next) {
-        const selection = captureActiveSelection();
-        setTimeout(() => {
-          if (selection) {
-            const quoted = `> ${selection
-              .trim()
-              .split("\n")
-              .join("\n> ")}\n\n`;
-            aiPanelRef.current?.prefill(quoted);
-          } else {
-            aiPanelRef.current?.focus();
-          }
-        }, 50);
-      }
-      return next;
-    });
-  }, [captureActiveSelection]);
+    const selection = captureActiveSelection();
+    const prefill = selection
+      ? `> ${selection.trim().split("\n").join("\n> ")}\n\n`
+      : null;
+    togglePanel(prefill);
+  }, [captureActiveSelection, togglePanel]);
 
   const openNewTab = useCallback(() => {
     newTab(inheritedCwdForNewTab());
@@ -427,9 +409,8 @@ export default function App() {
                           className="h-full"
                         >
                           <AiPanel
-                            ref={aiPanelRef}
                             tabId={activeId}
-                            onClose={() => setAiOpen(false)}
+                            onClose={closePanel}
                           />
                         </motion.div>
                       </ResizablePanel>
@@ -448,9 +429,7 @@ export default function App() {
             aiOpen={aiOpen}
             canSubmit={true}
             onOpenAi={toggleAi}
-            onSubmit={() => {
-              aiPanelRef.current?.focus();
-            }}
+            onSubmit={toggleAi}
           />
 
           <ShortcutsDialog

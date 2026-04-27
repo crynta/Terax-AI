@@ -17,7 +17,7 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useState } from "react";
-import { setOpenAiKey } from "./lib/keyring";
+import { setOpenAiKey } from "../lib/keyring";
 
 type Props = {
   open: boolean;
@@ -74,17 +74,13 @@ export function ApiKeyDialog({ open, onOpenChange, onSaved }: Props) {
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <div className="mb-1 flex size-8 items-center justify-center rounded-md bg-accent text-accent-foreground">
-            <HugeiconsIcon
-              icon={AiBrain01Icon}
-              size={16}
-              strokeWidth={1.75}
-            />
+            <HugeiconsIcon icon={AiBrain01Icon} size={16} strokeWidth={1.75} />
           </div>
           <DialogTitle>Connect OpenAI</DialogTitle>
           <DialogDescription>
-            Terax is BYOK — your key is stored in your OS keychain and used
-            only by this app. It never leaves your machine except to call the
-            OpenAI API directly.
+            Terax is BYOK — your key is stored in your OS keychain and used only
+            by this app. It never leaves your machine except to call the OpenAI
+            API directly.
           </DialogDescription>
         </DialogHeader>
 

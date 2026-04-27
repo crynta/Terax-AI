@@ -2,47 +2,23 @@ import { Button } from "@/components/ui/button";
 import { useChat, type UIMessage } from "@ai-sdk/react";
 import { AiBrain01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import {
-  forwardRef,
-  useEffect,
-  useImperativeHandle,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useEffect, useState } from "react";
+import { getOpenAiKey } from "../lib/keyring";
+import { getOrCreateChat, useChatStore } from "../store/chatStore";
 import { AiChatView } from "./AiChat";
-import { AiInput, type AiInputHandle } from "./AiInput";
+import { AiInput } from "./AiInput";
 import { ApiKeyDialog } from "./ApiKeyDialog";
-import { getOrCreateChat, useChatStore } from "./lib/chatStore";
-import { getOpenAiKey } from "./lib/keyring";
-
-export type AiPanelHandle = {
-  focus: () => void;
-  prefill: (text: string) => void;
-};
 
 type Props = {
   tabId: number;
   onClose?: () => void;
 };
 
-export const AiPanel = forwardRef<AiPanelHandle, Props>(function AiPanel(
-  { tabId, onClose },
-  ref,
-) {
+export function AiPanel({ tabId, onClose }: Props) {
   const apiKey = useChatStore((s) => s.apiKey);
   const setApiKey = useChatStore((s) => s.setApiKey);
   const [loaded, setLoaded] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const inputRef = useRef<AiInputHandle | null>(null);
-
-  useImperativeHandle(ref, () => ({
-    focus: () => inputRef.current?.focus(),
-    prefill: (text) => {
-      inputRef.current?.setValue(text);
-      inputRef.current?.focus();
-    },
-  }));
 
   useEffect(() => {
     let alive = true;
@@ -84,32 +60,30 @@ export const AiPanel = forwardRef<AiPanelHandle, Props>(function AiPanel(
 
   return (
     <ConnectedPanel
+      key={`${tabId}:${apiKey}`}
       tabId={tabId}
       apiKey={apiKey}
       onClose={onClose}
-      inputRef={inputRef}
     />
   );
-});
+}
 
 function ConnectedPanel({
   tabId,
   apiKey,
   onClose,
-  inputRef,
 }: {
   tabId: number;
   apiKey: string;
   onClose?: () => void;
-  inputRef: React.RefObject<AiInputHandle | null>;
 }) {
-  const chat = useMemo(() => getOrCreateChat(tabId, apiKey), [tabId, apiKey]);
+  const [chat] = useState(() => getOrCreateChat(tabId, apiKey));
   const helpers = useChat<UIMessage>({ chat });
   const isBusy =
     helpers.status === "submitted" || helpers.status === "streaming";
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full flex-col bg-card/30">
       <AiChatView
         messages={helpers.messages}
         status={helpers.status}
@@ -119,7 +93,6 @@ function ConnectedPanel({
         stop={helpers.stop}
       />
       <AiInput
-        ref={inputRef}
         busy={isBusy}
         onSubmit={(prompt) => {
           void helpers.sendMessage({ text: prompt });
