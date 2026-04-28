@@ -6,10 +6,6 @@ import {
   type AgentRunStatus,
 } from "../store/chatStore";
 
-type Props = {
-  apiKey: string;
-};
-
 /**
  * Headless bridge that mirrors chat lifecycle into the store, so the status
  * pill / mini-window / panel can react without being inside the chat hook tree.
@@ -20,17 +16,14 @@ type Props = {
  *    to act on it; hiding it would be hostile.
  *  - Persists messages of the active session on every change.
  */
-export function AgentRunBridge({ apiKey }: Props) {
+export function AgentRunBridge() {
   const sessionId = useChatStore((s) => s.activeSessionId);
   if (!sessionId) return null;
-  return <Bridge apiKey={apiKey} sessionId={sessionId} />;
+  return <Bridge sessionId={sessionId} />;
 }
 
-function Bridge({ apiKey, sessionId }: { apiKey: string; sessionId: string }) {
-  const chat = useMemo(
-    () => getOrCreateChat(apiKey, sessionId),
-    [apiKey, sessionId],
-  );
+function Bridge({ sessionId }: { sessionId: string }) {
+  const chat = useMemo(() => getOrCreateChat(sessionId), [sessionId]);
   const { status, messages } = useChat<UIMessage>({ chat });
   const patch = useChatStore((s) => s.patchAgentMeta);
   const openMini = useChatStore((s) => s.openMini);

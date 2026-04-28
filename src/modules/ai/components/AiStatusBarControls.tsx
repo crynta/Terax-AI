@@ -8,19 +8,37 @@ import {
 import { Kbd } from "@/components/ui/kbd";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
+import { openSettingsWindow } from "@/modules/settings/openSettingsWindow";
 import {
   Add01Icon,
   ArrowDown01Icon,
   ArrowUpIcon,
+  ChatGptIcon,
+  ClaudeIcon,
+  GoogleGeminiIcon,
+  Grok02Icon,
   Message01Icon,
   Mic01Icon,
   StopCircleIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useRef } from "react";
-import { MODELS, type ModelId } from "../config";
+import {
+  getModel,
+  MODELS,
+  PROVIDERS,
+  type ModelId,
+  type ProviderId,
+} from "../config";
 import { ACCEPTED_FILES, useComposer } from "../lib/composer";
 import { useChatStore } from "../store/chatStore";
+
+const PROVIDER_ICON = {
+  openai: ChatGptIcon,
+  anthropic: ClaudeIcon,
+  google: GoogleGeminiIcon,
+  xai: Grok02Icon,
+} as const satisfies Record<ProviderId, typeof ChatGptIcon>;
 
 export function AiOpenButton({ onOpen }: { onOpen: () => void }) {
   return (
@@ -71,7 +89,7 @@ export function AiStatusBarControls() {
         <IconBtn
           title={
             !c.voice.hasKey
-              ? "Voice needs an API key"
+              ? "Voice needs an OpenAI key"
               : c.voice.recording
                 ? "Stop & transcribe"
                 : c.voice.transcribing
@@ -134,20 +152,25 @@ export function AiStatusBarControls() {
           <HugeiconsIcon icon={ArrowUpIcon} size={13} strokeWidth={1.75} />
         </Button>
       )}
-
-      {/* <span className="mx-1 h-4 w-px bg-border/60" aria-hidden /> */}
-
-      {/* <IconBtn title="Close AI agent (⌘I)" onClick={onClose}>
-        <HugeiconsIcon icon={Cancel01Icon} size={12} strokeWidth={1.75} />
-      </IconBtn> */}
     </div>
   );
 }
 
 function ModelDropdown() {
   const selected = useChatStore((s) => s.selectedModelId);
+  const apiKeys = useChatStore((s) => s.apiKeys);
   const setSelected = useChatStore((s) => s.setSelectedModelId);
-  const current = MODELS.find((m) => m.id === selected) ?? MODELS[0];
+  const current = getModel(selected);
+  const currentProviderHasKey = !!apiKeys[current.provider];
+
+  const onPick = (id: ModelId, providerId: ProviderId) => {
+    if (!apiKeys[providerId]) {
+      void openSettingsWindow("ai");
+      return;
+    }
+    setSelected(id);
+  };
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -155,8 +178,23 @@ function ModelDropdown() {
           type="button"
           variant="ghost"
           size="sm"
-          className="h-6 gap-1 rounded-md px-1.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+          className={cn(
+            "h-5.5 gap-1 rounded-md px-1.5 my-1 text-xs hover:bg-accent hover:text-foreground",
+            currentProviderHasKey
+              ? "text-muted-foreground"
+              : "text-amber-600 dark:text-amber-400",
+          )}
+          title={
+            currentProviderHasKey
+              ? `Model: ${current.label}`
+              : `${current.label} — no key configured`
+          }
         >
+          {/* <HugeiconsIcon
+            icon={PROVIDER_ICON[current.provider]}
+            size={12}
+            strokeWidth={1.25}
+          /> */}
           {current.label}
           <HugeiconsIcon
             icon={ArrowDown01Icon}
@@ -166,20 +204,52 @@ function ModelDropdown() {
           />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="min-w-45">
-        {MODELS.map((m) => (
-          <DropdownMenuItem
-            key={m.id}
-            onSelect={() => setSelected(m.id as ModelId)}
-            className={cn(
-              "flex flex-col items-start gap-0 text-xs",
-              m.id === selected && "bg-accent/40",
-            )}
-          >
-            <span className="font-medium">{m.label}</span>
-            <span className="text-[10px] text-muted-foreground">{m.hint}</span>
-          </DropdownMenuItem>
-        ))}
+      <DropdownMenuContent align="end" className="min-w-[240px]">
+        {PROVIDERS.map((p) => {
+          const models = MODELS.filter((m) => m.provider === p.id);
+          const hasKey = !!apiKeys[p.id];
+          return (
+            <div key={p.id} className="px-1 pt-1.5 first:pt-1">
+              <div className="mb-0.5 flex items-center gap-1.5 px-2 text-[9.5px] font-medium tracking-wide text-muted-foreground uppercase">
+                <HugeiconsIcon
+                  icon={PROVIDER_ICON[p.id]}
+                  size={15}
+                  strokeWidth={1.25}
+                />
+                <span>{p.label}</span>
+                {!hasKey ? (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      void openSettingsWindow("ai");
+                    }}
+                    className="ml-auto rounded-sm px-1 text-[9px] normal-case tracking-normal text-amber-600 underline-offset-2 hover:underline dark:text-amber-400"
+                  >
+                    Set key…
+                  </button>
+                ) : null}
+              </div>
+              {models.map((m) => (
+                <DropdownMenuItem
+                  key={m.id}
+                  disabled={!hasKey}
+                  onSelect={() => onPick(m.id as ModelId, p.id)}
+                  className={cn(
+                    "flex flex-col items-start gap-0 text-xs",
+                    m.id === selected && "bg-accent/40",
+                  )}
+                >
+                  <span className="font-medium">{m.label}</span>
+                  <span className="text-[10px] text-muted-foreground">
+                    {m.hint}
+                  </span>
+                </DropdownMenuItem>
+              ))}
+            </div>
+          );
+        })}
       </DropdownMenuContent>
     </DropdownMenu>
   );

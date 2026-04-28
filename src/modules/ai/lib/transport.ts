@@ -2,6 +2,7 @@ import type { UIMessage } from "@ai-sdk/react";
 import { DirectChatTransport } from "ai";
 import { TERMINAL_BUFFER_LINES, type ModelId } from "../config";
 import { createTeraxAgent } from "./agent";
+import type { ProviderKeys } from "./keyring";
 import type { ToolContext } from "../tools/tools";
 
 type LiveSnapshot = {
@@ -14,7 +15,7 @@ type LiveSnapshot = {
 const MAX_TERMINAL_CHARS = 12_000;
 
 type Deps = {
-  apiKey: string;
+  getKeys: () => ProviderKeys;
   toolContext: ToolContext;
   getModelId: () => ModelId;
   getLive: () => LiveSnapshot;
@@ -28,7 +29,7 @@ export function createContextAwareTransport(deps: Deps) {
       [k: string]: unknown;
     }) {
       const agent = createTeraxAgent({
-        apiKey: deps.apiKey,
+        keys: deps.getKeys(),
         modelId: deps.getModelId(),
         toolContext: deps.toolContext,
         onStep: deps.onStep,
@@ -42,7 +43,7 @@ export function createContextAwareTransport(deps: Deps) {
     },
     async reconnectToStream(options: unknown) {
       const agent = createTeraxAgent({
-        apiKey: deps.apiKey,
+        keys: deps.getKeys(),
         modelId: deps.getModelId(),
         toolContext: deps.toolContext,
         onStep: deps.onStep,

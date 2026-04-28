@@ -1,6 +1,38 @@
 mod modules;
 
 use modules::{fs, pty, shell};
+use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
+
+#[tauri::command]
+async fn open_settings_window(app: tauri::AppHandle, tab: Option<String>) -> Result<(), String> {
+    let url_path = match tab.as_deref() {
+        Some(t) if !t.is_empty() => format!("settings.html?tab={}", t),
+        _ => "settings.html".to_string(),
+    };
+
+    if let Some(window) = app.get_webview_window("settings") {
+        let _ = window.set_focus();
+        if tab.is_some() {
+            let _ = window.eval(&format!(
+                "window.dispatchEvent(new CustomEvent('terax:settings-tab', {{ detail: {:?} }}));",
+                tab.unwrap_or_default()
+            ));
+        }
+        return Ok(());
+    }
+
+    WebviewWindowBuilder::new(&app, "settings", WebviewUrl::App(url_path.into()))
+        .title("Settings")
+        .inner_size(720.0, 520.0)
+        .min_inner_size(720.0, 520.0)
+        .max_inner_size(720.0, 520.0)
+        .resizable(false)
+        .title_bar_style(tauri::TitleBarStyle::Overlay)
+        .hidden_title(true)
+        .build()
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -31,6 +63,7 @@ pub fn run() {
             fs::mutate::fs_rename,
             fs::mutate::fs_delete,
             shell::shell_run_command,
+            open_settings_window,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

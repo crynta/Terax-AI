@@ -3,9 +3,19 @@ export { AgentStatusPill } from "./components/AgentStatusPill";
 export { AiInputBar } from "./components/AiInputBar";
 export { AiMiniWindow } from "./components/AiMiniWindow";
 export { SelectionAskAi } from "./components/SelectionAskAi";
-export { getOpenAiKey, hasOpenAiKey } from "./lib/keyring";
 export {
+  EMPTY_PROVIDER_KEYS,
+  getAllKeys,
+  getKey,
+  setKey,
+  clearKey,
+  hasAnyKey,
+  type ProviderKeys,
+} from "./lib/keyring";
+export {
+  getActiveProviderKey,
   getOrCreateChat,
+  hasKeyForModel,
   sendMessage,
   stop,
   useChatStore,

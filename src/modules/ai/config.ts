@@ -1,14 +1,83 @@
 export const KEYRING_SERVICE = "terax-ai";
-export const KEYRING_ACCOUNT_OPENAI = "openai-api-key";
 
-export const MODELS = [
-  { id: "gpt-4o-mini", label: "GPT-4o mini", hint: "Fast, default" },
-  { id: "gpt-4o", label: "GPT-4o", hint: "Higher quality" },
-  { id: "gpt-5-mini", label: "GPT-5 mini", hint: "Reasoning, fast" },
-  { id: "gpt-5", label: "GPT-5", hint: "Reasoning, best" },
+export type ProviderId = "openai" | "anthropic" | "google" | "xai";
+
+export type ProviderInfo = {
+  id: ProviderId;
+  label: string;
+  keyringAccount: string;
+  keyPrefix: string | null;
+  consoleUrl: string;
+};
+
+export const PROVIDERS: readonly ProviderInfo[] = [
+  {
+    id: "openai",
+    label: "OpenAI",
+    keyringAccount: "openai-api-key",
+    keyPrefix: "sk-",
+    consoleUrl: "https://platform.openai.com/api-keys",
+  },
+  {
+    id: "anthropic",
+    label: "Anthropic",
+    keyringAccount: "anthropic-api-key",
+    keyPrefix: "sk-ant-",
+    consoleUrl: "https://console.anthropic.com/settings/keys",
+  },
+  {
+    id: "google",
+    label: "Google",
+    keyringAccount: "google-api-key",
+    keyPrefix: null,
+    consoleUrl: "https://aistudio.google.com/apikey",
+  },
+  {
+    id: "xai",
+    label: "xAI",
+    keyringAccount: "xai-api-key",
+    keyPrefix: "xai-",
+    consoleUrl: "https://console.x.ai/",
+  },
 ] as const;
 
+export function getProvider(id: ProviderId): ProviderInfo {
+  const p = PROVIDERS.find((x) => x.id === id);
+  if (!p) throw new Error(`Unknown provider: ${id}`);
+  return p;
+}
+
+export type ModelInfo = {
+  id: string;
+  provider: ProviderId;
+  label: string;
+  hint: string;
+};
+
+export const MODELS = [
+  // OpenAI
+  { id: "gpt-4o-mini", provider: "openai", label: "GPT-4o mini", hint: "Fast, default" },
+  { id: "gpt-5.5", provider: "openai", label: "GPT-5.5", hint: "Higher quality" },
+  { id: "gpt-5.3-codex", provider: "openai", label: "GPT-5.3 Codex", hint: "Coding" },
+  // Anthropic
+  { id: "claude-haiku-4-5", provider: "anthropic", label: "Claude Haiku 4.5", hint: "Fast" },
+  { id: "claude-sonnet-4-6", provider: "anthropic", label: "Claude Sonnet 4.6", hint: "Balanced" },
+  { id: "claude-opus-4-7", provider: "anthropic", label: "Claude Opus 4.7", hint: "Best" },
+  // Google
+  { id: "gemini-3.1-pro", provider: "google", label: "Gemini 3.1 Pro", hint: "Best" },
+  { id: "gemini-3-flash", provider: "google", label: "Gemini 3 Flash", hint: "Fast" },
+  // xAI
+  { id: "grok-4.20-reasoning", provider: "xai", label: "Grok 4.20 Reasoning", hint: "Reasoning" },
+  { id: "grok-4.20-non-reasoning", provider: "xai", label: "Grok 4.20", hint: "Fast" },
+] as const satisfies readonly ModelInfo[];
+
 export type ModelId = (typeof MODELS)[number]["id"];
+
+export function getModel(id: ModelId): ModelInfo {
+  const m = MODELS.find((x) => x.id === id);
+  if (!m) throw new Error(`Unknown model: ${id}`);
+  return m;
+}
 
 export const DEFAULT_MODEL_ID: ModelId = "gpt-4o-mini";
 export const MAX_AGENT_STEPS = 24;

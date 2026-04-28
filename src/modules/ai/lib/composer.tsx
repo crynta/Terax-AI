@@ -54,11 +54,10 @@ export function useComposer(): ComposerCtx {
 }
 
 type ProviderProps = {
-  apiKey: string;
   children: React.ReactNode;
 };
 
-export function AiComposerProvider({ apiKey, children }: ProviderProps) {
+export function AiComposerProvider({ children }: ProviderProps) {
   const sessionId = useChatStore((s) => s.activeSessionId);
   const status = useChatStore((s) => s.agentMeta.status);
   const isBusy = status === "thinking" || status === "streaming";
@@ -167,7 +166,7 @@ export function AiComposerProvider({ apiKey, children }: ProviderProps) {
     }
 
     if (!sessionId) return;
-    const chat = getOrCreateChat(apiKey, sessionId);
+    const chat = getOrCreateChat(sessionId);
     void chat.sendMessage({ role: "user", parts } as Parameters<
       typeof chat.sendMessage
     >[0]);
@@ -177,7 +176,7 @@ export function AiComposerProvider({ apiKey, children }: ProviderProps) {
 
   const stop = () => {
     if (!sessionId) return;
-    void getOrCreateChat(apiKey, sessionId).stop();
+    void getOrCreateChat(sessionId).stop();
   };
 
   const canSend = !isBusy && (value.trim().length > 0 || files.length > 0);

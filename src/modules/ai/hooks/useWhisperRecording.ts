@@ -35,7 +35,7 @@ export function useWhisperRecording({
 }: {
   onResult: (text: string) => void;
 }) {
-  const apiKey = useChatStore((s) => s.apiKey);
+  const apiKey = useChatStore((s) => s.apiKeys.openai);
   const [state, setState] = useState<State>("idle");
   const recRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);

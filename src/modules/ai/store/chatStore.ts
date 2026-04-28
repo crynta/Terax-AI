@@ -4,7 +4,13 @@ import {
   lastAssistantMessageIsCompleteWithApprovalResponses,
 } from "ai";
 import { create } from "zustand";
-import { DEFAULT_MODEL_ID, type ModelId } from "../config";
+import {
+  DEFAULT_MODEL_ID,
+  getModel,
+  type ModelId,
+  type ProviderId,
+} from "../config";
+import { EMPTY_PROVIDER_KEYS, type ProviderKeys } from "../lib/keyring";
 import {
   deleteSessionData,
   deriveTitle,
@@ -61,8 +67,9 @@ type StoreState = {
   live: Live;
   setLive: (live: Live) => void;
 
-  apiKey: string | null;
-  setApiKey: (key: string | null) => void;
+  apiKeys: ProviderKeys;
+  setApiKeys: (keys: ProviderKeys) => void;
+  setApiKey: (provider: ProviderId, key: string | null) => void;
 
   selectedModelId: ModelId;
   setSelectedModelId: (id: ModelId) => void;
@@ -111,13 +118,14 @@ const NOOP_LIVE: Live = {
   getActiveFile: () => null,
 };
 
-// Per-session Chat instances. Cleared whenever the API key changes.
+// Per-session Chat instances. Transport reads the keys map lazily, so a key
+// change does not require rebuilding chats.
 const chats = new Map<string, Chat<UIMessage>>();
 // Initial messages for a session, populated at hydration time and consumed
 // when the matching Chat is constructed.
 const seedMessages = new Map<string, UIMessage[]>();
 
-function makeChat(apiKey: string, sessionId: string): Chat<UIMessage> {
+function makeChat(sessionId: string): Chat<UIMessage> {
   const toolContext: ToolContext = {
     getCwd: () => useChatStore.getState().live.getCwd(),
     getTerminalContext: () =>
@@ -127,7 +135,7 @@ function makeChat(apiKey: string, sessionId: string): Chat<UIMessage> {
   };
 
   const transport = createContextAwareTransport({
-    apiKey,
+    getKeys: () => useChatStore.getState().apiKeys,
     toolContext,
     getModelId: () => useChatStore.getState().selectedModelId,
     getLive: () => {
@@ -161,22 +169,15 @@ function makeChat(apiKey: string, sessionId: string): Chat<UIMessage> {
   });
 }
 
-function disposeAllChats() {
-  for (const c of chats.values()) {
-    void c.stop();
-  }
-  chats.clear();
-}
-
 export const useChatStore = create<StoreState>((set, get) => ({
   live: NOOP_LIVE,
   setLive: (live) => set({ live }),
 
-  apiKey: null,
-  setApiKey: (key) => {
-    if (get().apiKey === key) return;
-    disposeAllChats();
-    set({ apiKey: key, agentMeta: IDLE_META });
+  apiKeys: { ...EMPTY_PROVIDER_KEYS },
+  setApiKeys: (keys) => set({ apiKeys: keys, agentMeta: IDLE_META }),
+  setApiKey: (provider, key) => {
+    const next = { ...get().apiKeys, [provider]: key };
+    set({ apiKeys: next, agentMeta: IDLE_META });
   },
 
   selectedModelId: DEFAULT_MODEL_ID,
@@ -342,13 +343,20 @@ export function getAgentMeta(): AgentMeta {
   return useChatStore.getState().agentMeta;
 }
 
-export function getOrCreateChat(
-  apiKey: string,
-  sessionId: string,
-): Chat<UIMessage> {
+export function getActiveProviderKey(): string | null {
+  const { selectedModelId, apiKeys } = useChatStore.getState();
+  return apiKeys[getModel(selectedModelId).provider] ?? null;
+}
+
+export function hasKeyForModel(modelId: ModelId): boolean {
+  const { apiKeys } = useChatStore.getState();
+  return !!apiKeys[getModel(modelId).provider];
+}
+
+export function getOrCreateChat(sessionId: string): Chat<UIMessage> {
   const existing = chats.get(sessionId);
   if (existing) return existing;
-  const c = makeChat(apiKey, sessionId);
+  const c = makeChat(sessionId);
   chats.set(sessionId, c);
   return c;
 }
@@ -361,10 +369,10 @@ export function getChat(sessionId?: string): Chat<UIMessage> | undefined {
 
 export async function sendMessage(text: string): Promise<boolean> {
   const state = useChatStore.getState();
-  const apiKey = state.apiKey;
   const sessionId = state.activeSessionId;
-  if (!apiKey || !sessionId) return false;
-  const c = getOrCreateChat(apiKey, sessionId);
+  if (!sessionId) return false;
+  if (!getActiveProviderKey()) return false;
+  const c = getOrCreateChat(sessionId);
   await c.sendMessage({ text });
   return true;
 }

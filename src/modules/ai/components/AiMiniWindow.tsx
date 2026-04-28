@@ -22,17 +22,13 @@ import type { SessionMeta } from "../lib/sessions";
 import { getOrCreateChat, useChatStore } from "../store/chatStore";
 import { AiChatView } from "./AiChat";
 
-type Props = {
-  apiKey: string;
-};
-
 const SUGGESTIONS = [
   { label: "Explain the last error", text: "Explain the last error in the terminal." },
   { label: "Generate a command", text: "Give me a command to " },
   { label: "Summarize buffer", text: "Summarize what just happened in the terminal." },
 ];
 
-export function AiMiniWindow({ apiKey }: Props) {
+export function AiMiniWindow() {
   const closeMini = useChatStore((s) => s.closeMini);
   const sessionId = useChatStore((s) => s.activeSessionId);
 
@@ -63,7 +59,7 @@ export function AiMiniWindow({ apiKey }: Props) {
       )}
     >
       {sessionId ? (
-        <Body apiKey={apiKey} sessionId={sessionId} onClose={closeMini} />
+        <Body sessionId={sessionId} onClose={closeMini} />
       ) : (
         <EmptyShell onClose={closeMini} />
       )}
@@ -72,21 +68,16 @@ export function AiMiniWindow({ apiKey }: Props) {
 }
 
 function Body({
-  apiKey,
   sessionId,
   onClose,
 }: {
-  apiKey: string;
   sessionId: string;
   onClose: () => void;
 }) {
   const focusInput = useChatStore((s) => s.focusInput);
   const step = useChatStore((s) => s.agentMeta.step);
 
-  const chat = useMemo(
-    () => getOrCreateChat(apiKey, sessionId),
-    [apiKey, sessionId],
-  );
+  const chat = useMemo(() => getOrCreateChat(sessionId), [sessionId]);
   const helpers = useChat<UIMessage>({ chat });
   const isBusy =
     helpers.status === "submitted" || helpers.status === "streaming";

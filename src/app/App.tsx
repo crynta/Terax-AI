@@ -9,13 +9,13 @@ import {
   AgentRunBridge,
   AiInputBar,
   AiMiniWindow,
+  getAllKeys,
+  hasAnyKey,
   SelectionAskAi,
   useChatStore,
 } from "@/modules/ai";
 import { AiComposerProvider } from "@/modules/ai/lib/composer";
-import { ApiKeyDialog } from "@/modules/ai/components/ApiKeyDialog";
 import { AiInputBarConnect } from "@/modules/ai/components/AiInputBar";
-import { getOpenAiKey } from "@/modules/ai/lib/keyring";
 import { EditorStack, type EditorPaneHandle } from "@/modules/editor";
 import { FileExplorer } from "@/modules/explorer";
 import {
@@ -23,6 +23,8 @@ import {
   type SearchInlineHandle,
   type SearchTarget,
 } from "@/modules/header";
+import { openSettingsWindow } from "@/modules/settings/openSettingsWindow";
+import { onKeysChanged, onPreferencesChange } from "@/modules/settings/store";
 import {
   ShortcutsDialog,
   useGlobalShortcuts,
@@ -40,6 +42,7 @@ import type { SearchAddon } from "@xterm/addon-search";
 import { AnimatePresence, motion } from "motion/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PanelImperativeHandle } from "react-resizable-panels";
+import type { ModelId } from "@/modules/ai/config";
 
 export default function App() {
   const {
@@ -77,28 +80,54 @@ export default function App() {
   }, []);
 
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
-  const [apiKeyDialogOpen, setApiKeyDialogOpen] = useState(false);
   const miniOpen = useChatStore((s) => s.mini.open);
   const openMini = useChatStore((s) => s.openMini);
   const focusInput = useChatStore((s) => s.focusInput);
   const openPanel = useChatStore((s) => s.openPanel);
   const panelOpen = useChatStore((s) => s.panelOpen);
-  const apiKey = useChatStore((s) => s.apiKey);
-  const setApiKey = useChatStore((s) => s.setApiKey);
+  const apiKeys = useChatStore((s) => s.apiKeys);
+  const setApiKeys = useChatStore((s) => s.setApiKeys);
+  const setSelectedModelId = useChatStore((s) => s.setSelectedModelId);
   const setLive = useChatStore((s) => s.setLive);
+  const hasComposer = hasAnyKey(apiKeys);
 
-  const [keyLoaded, setKeyLoaded] = useState(false);
+  const [keysLoaded, setKeysLoaded] = useState(false);
   useEffect(() => {
     let alive = true;
-    getOpenAiKey().then((k) => {
+    const reload = () => {
+      void getAllKeys().then((keys) => {
+        if (!alive) return;
+        setApiKeys(keys);
+        setKeysLoaded(true);
+      });
+    };
+    reload();
+    const unlistenP = onKeysChanged(reload);
+    return () => {
+      alive = false;
+      void unlistenP.then((fn) => fn());
+    };
+  }, [setApiKeys]);
+
+  // Mirror the saved default model into the live store, and react to changes
+  // made in the settings window.
+  useEffect(() => {
+    let alive = true;
+    void import("@/modules/settings/store").then(async ({ loadPreferences }) => {
+      const prefs = await loadPreferences();
       if (!alive) return;
-      setApiKey(k);
-      setKeyLoaded(true);
+      setSelectedModelId(prefs.defaultModelId);
+    });
+    const unlistenP = onPreferencesChange((key, value) => {
+      if (key === "defaultModelId" && typeof value === "string") {
+        setSelectedModelId(value as ModelId);
+      }
     });
     return () => {
       alive = false;
+      void unlistenP.then((fn) => fn());
     };
-  }, [setApiKey]);
+  }, [setSelectedModelId]);
 
   const hydrateSessions = useChatStore((s) => s.hydrateSessions);
   useEffect(() => {
@@ -175,8 +204,8 @@ export default function App() {
   }, [tabs, activeId]);
 
   const togglePanelAndFocus = useCallback(() => {
-    if (!apiKey) {
-      setApiKeyDialogOpen(true);
+    if (!hasComposer) {
+      void openSettingsWindow("ai");
       return;
     }
     if (panelOpen) {
@@ -185,13 +214,13 @@ export default function App() {
       openPanel();
       focusInput(null);
     }
-  }, [apiKey, panelOpen, openPanel, focusInput]);
+  }, [hasComposer, panelOpen, openPanel, focusInput]);
 
   const attachSelection = useChatStore((s) => s.attachSelection);
 
   const askFromSelection = useCallback(() => {
-    if (!apiKey) {
-      setApiKeyDialogOpen(true);
+    if (!hasComposer) {
+      void openSettingsWindow("ai");
       return;
     }
     const selection = captureActiveSelection();
@@ -202,7 +231,7 @@ export default function App() {
     const source: "terminal" | "editor" =
       activeTab?.kind === "editor" ? "editor" : "terminal";
     attachSelection(selection, source);
-  }, [apiKey, captureActiveSelection, focusInput, attachSelection, activeTab]);
+  }, [hasComposer, captureActiveSelection, focusInput, attachSelection, activeTab]);
 
   const [askPopup, setAskPopup] = useState<{ x: number; y: number } | null>(
     null,
@@ -243,8 +272,6 @@ export default function App() {
       if (!pressed) return;
       lastX = e.clientX;
       lastY = e.clientY;
-      // Cheap: defer to next frame so xterm/CodeMirror have already
-      // committed the selection before we read it back.
       requestAnimationFrame(() => refreshPopup(lastX, lastY));
     };
     const onUp = (e: MouseEvent) => {
@@ -294,8 +321,6 @@ export default function App() {
   const cdInNewTab = useCallback(
     (path: string) => {
       const id = newTab(path);
-      // After mount, send cd so the prompt reflects the directory immediately
-      // even if the shell init didn't pick up the spawn cwd cleanly.
       setTimeout(() => {
         const t = terminalRefs.current.get(id);
         if (!t) return;
@@ -421,10 +446,6 @@ export default function App() {
     const findCwd = () => {
       const active = tabs.find((x) => x.id === activeId);
       if (active?.kind === "terminal" && active.cwd) return active.cwd;
-      // Fall back to the most-recently-active terminal tab's cwd, then the
-      // workspace root, then the home dir. This keeps `run_command` anchored
-      // when the user is on an editor tab or a terminal that hasn't reported
-      // a cwd yet, instead of letting Rust default to the app's own dir.
       for (let i = tabs.length - 1; i >= 0; i--) {
         const t = tabs[i];
         if (t.kind === "terminal" && t.cwd) return t.cwd;
@@ -468,7 +489,7 @@ export default function App() {
             onClose={handleClose}
             onToggleSidebar={toggleSidebar}
             onOpenShortcuts={() => setShortcutsOpen(true)}
-            onOpenSettings={() => {}}
+            onOpenSettings={() => void openSettingsWindow()}
             searchTarget={searchTarget}
             searchRef={searchInlineRef}
           />
@@ -537,7 +558,7 @@ export default function App() {
                   </div>
 
                   <AnimatePresence initial={false}>
-                    {panelOpen && keyLoaded ? (
+                    {panelOpen && keysLoaded ? (
                       <motion.div
                         key="ai-panel"
                         data-ai-input-bar
@@ -547,11 +568,11 @@ export default function App() {
                         transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
                         className="overflow-hidden"
                       >
-                        {apiKey ? (
+                        {hasComposer ? (
                           <AiInputBar />
                         ) : (
                           <AiInputBarConnect
-                            onAdd={() => setApiKeyDialogOpen(true)}
+                            onAdd={() => void openSettingsWindow("ai")}
                           />
                         )}
                       </motion.div>
@@ -568,15 +589,13 @@ export default function App() {
             home={home}
             onCd={sendCd}
             onOpenMini={openMini}
-            hasComposer={!!apiKey}
+            hasComposer={hasComposer}
           />
 
-          {apiKey ? <AgentRunBridge apiKey={apiKey} /> : null}
+          {hasComposer ? <AgentRunBridge /> : null}
 
           <AnimatePresence>
-            {miniOpen && apiKey ? (
-              <AiMiniWindow key="ai-mini" apiKey={apiKey} />
-            ) : null}
+            {miniOpen && hasComposer ? <AiMiniWindow key="ai-mini" /> : null}
             {askPopup ? (
               <SelectionAskAi
                 key="ask-ai-popup"
@@ -592,24 +611,15 @@ export default function App() {
             open={shortcutsOpen}
             onOpenChange={setShortcutsOpen}
           />
-
-          <ApiKeyDialog
-            open={apiKeyDialogOpen}
-            onOpenChange={setApiKeyDialogOpen}
-            onSaved={(k) => {
-              setApiKey(k);
-              openPanel();
-            }}
-          />
         </div>
       </TooltipProvider>
     </ThemeProvider>
   );
 
-  // Mount the composer provider whenever an API key exists — independent of
-  // panelOpen — so toggling the panel never re-mounts terminals/editors.
-  if (apiKey) {
-    return <AiComposerProvider apiKey={apiKey}>{shell}</AiComposerProvider>;
+  // Mount the composer provider whenever any provider has a key — independent
+  // of panelOpen — so toggling the panel never re-mounts terminals/editors.
+  if (hasComposer) {
+    return <AiComposerProvider>{shell}</AiComposerProvider>;
   }
   return shell;
 }
