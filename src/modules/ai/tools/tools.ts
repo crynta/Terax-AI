@@ -44,7 +44,7 @@ export type ToolContext = {
   openPreview: (url: string) => boolean;
 };
 
-function resolvePath(rawPath: string, cwd: string | null): string {
+export function resolvePath(rawPath: string, cwd: string | null): string {
   if (rawPath.startsWith("/") || /^[a-zA-Z]:[\\/]/.test(rawPath))
     return rawPath;
   if (!cwd)

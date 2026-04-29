@@ -21,10 +21,15 @@ type Options = {
 export function useDocument({ path, onDirtyChange }: Options) {
   const [doc, setDoc] = useState<DocumentState>({ status: "loading" });
   const [dirty, setDirty] = useState(false);
+  const [reloadCounter, setReloadCounter] = useState(0);
 
   // Track the saved buffer so we can detect changes cheaply.
   const savedRef = useRef<string>("");
   const bufferRef = useRef<string>("");
+  const dirtyRef = useRef(false);
+  useEffect(() => {
+    dirtyRef.current = dirty;
+  }, [dirty]);
 
   // Notify parent of dirty transitions.
   const onDirtyChangeRef = useRef(onDirtyChange);
@@ -35,7 +40,7 @@ export function useDocument({ path, onDirtyChange }: Options) {
     onDirtyChangeRef.current?.(dirty);
   }, [dirty]);
 
-  // Load on path change.
+  // Load on path change or explicit reload.
   useEffect(() => {
     let cancelled = false;
     setDoc({ status: "loading" });
@@ -69,7 +74,15 @@ export function useDocument({ path, onDirtyChange }: Options) {
     return () => {
       cancelled = true;
     };
-  }, [path]);
+  }, [path, reloadCounter]);
+
+  /** Re-read the file from disk. No-op (silent) if the buffer is dirty —
+   *  callers shouldn't clobber unsaved user edits. Returns whether reload ran. */
+  const reload = useCallback((): boolean => {
+    if (dirtyRef.current) return false;
+    setReloadCounter((n) => n + 1);
+    return true;
+  }, []);
 
   const onChange = useCallback((next: string) => {
     bufferRef.current = next;
@@ -84,5 +97,5 @@ export function useDocument({ path, onDirtyChange }: Options) {
     setDirty(false);
   }, [path, dirty]);
 
-  return { doc, dirty, onChange, save };
+  return { doc, dirty, onChange, save, reload };
 }

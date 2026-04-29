@@ -17,6 +17,7 @@ import {
 import { AiInputBarConnect } from "@/modules/ai/components/AiInputBar";
 import { AiComposerProvider } from "@/modules/ai/lib/composer";
 import {
+  AiDiffStack,
   EditorStack,
   NewEditorDialog,
   type EditorPaneHandle,
@@ -64,6 +65,8 @@ export default function App() {
     newTab,
     openFileTab,
     newPreviewTab,
+    openAiDiffTab,
+    setAiDiffStatus,
     closeTab,
     updateTab,
     selectByIndex,
@@ -108,6 +111,7 @@ export default function App() {
   const setApiKeys = useChatStore((s) => s.setApiKeys);
   const setSelectedModelId = useChatStore((s) => s.setSelectedModelId);
   const setLive = useChatStore((s) => s.setLive);
+  const respondToApproval = useChatStore((s) => s.respondToApproval);
   const hasComposer = hasAnyKey(apiKeys);
 
   const [keysLoaded, setKeysLoaded] = useState(false);
@@ -150,6 +154,26 @@ export default function App() {
   const isTerminalTab = activeTab?.kind === "terminal";
   const isEditorTab = activeTab?.kind === "editor";
   const isPreviewTab = activeTab?.kind === "preview";
+  const isAiDiffTab = activeTab?.kind === "ai-diff";
+
+  // When an AI diff is approved (write_file applied to disk), reload any
+  // open editor tabs for that path so the user sees the new content. We
+  // track which approvalIds we've already handled to fire the reload only
+  // once per applied diff.
+  const appliedDiffsRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    for (const t of tabs) {
+      if (t.kind !== "ai-diff") continue;
+      if (t.status !== "approved") continue;
+      if (appliedDiffsRef.current.has(t.approvalId)) continue;
+      appliedDiffsRef.current.add(t.approvalId);
+      for (const e of tabs) {
+        if (e.kind !== "editor") continue;
+        if (e.path !== t.path) continue;
+        editorRefs.current.get(e.id)?.reload();
+      }
+    }
+  }, [tabs]);
 
   const { explorerRoot, inheritedCwdForNewTab } = useWorkspaceCwd(
     activeTab,
@@ -616,6 +640,20 @@ export default function App() {
                         onUrlChange={handlePreviewUrl}
                       />
                     </div>
+                    <div
+                      className={cn(
+                        "absolute inset-0 px-3 pt-2 pb-2",
+                        !isAiDiffTab && "invisible pointer-events-none",
+                      )}
+                      aria-hidden={!isAiDiffTab}
+                    >
+                      <AiDiffStack
+                        tabs={tabs}
+                        activeId={activeId}
+                        onAccept={(id) => respondToApproval(id, true)}
+                        onReject={(id) => respondToApproval(id, false)}
+                      />
+                    </div>
                   </div>
 
                   <AnimatePresence initial={false}>
@@ -657,7 +695,12 @@ export default function App() {
             }}
           />
 
-          {hasComposer ? <AgentRunBridge /> : null}
+          {hasComposer ? (
+            <AgentRunBridge
+              openAiDiffTab={openAiDiffTab}
+              setAiDiffStatus={setAiDiffStatus}
+            />
+          ) : null}
 
           <AnimatePresence>
             {miniOpen && hasComposer ? <AiMiniWindow key="ai-mini" /> : null}

@@ -26,6 +26,8 @@ export type EditorPaneHandle = {
   clearQuery: () => void;
   getSelection: () => string | null;
   getPath: () => string;
+  /** Re-read the file from disk. Skips silently if the buffer is dirty. */
+  reload: () => boolean;
 };
 
 type Props = {
@@ -42,7 +44,9 @@ function formatBytes(n: number): string {
 
 export const EditorPane = forwardRef<EditorPaneHandle, Props>(
   function EditorPane({ path, onDirtyChange, onSaved }, ref) {
-    const { doc, onChange, save } = useDocument({ path, onDirtyChange });
+    const { doc, onChange, save, reload } = useDocument({ path, onDirtyChange });
+    const reloadRef = useRef(reload);
+    reloadRef.current = reload;
     const cmRef = useRef<ReactCodeMirrorRef>(null);
     const editorThemeId = usePreferencesStore((s) => s.editorTheme);
     const themeExt = EDITOR_THEME_EXT[editorThemeId] ?? EDITOR_THEME_EXT.atomone;
@@ -127,6 +131,7 @@ export const EditorPane = forwardRef<EditorPaneHandle, Props>(
           return view.state.sliceDoc(from, to);
         },
         getPath: () => path,
+        reload: () => reloadRef.current(),
       }),
       [path],
     );

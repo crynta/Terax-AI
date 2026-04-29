@@ -65,9 +65,23 @@ export type PendingSelection = {
   source: "terminal" | "editor";
 };
 
+export type ApprovalResponder = (
+  approvalId: string,
+  approved: boolean,
+) => void;
+
 type StoreState = {
   live: Live;
   setLive: (live: Live) => void;
+
+  /**
+   * Set by AgentRunBridge each render. Lets surfaces outside the chat hook
+   * tree (e.g. the AI diff tab in the editor area) resolve a pending tool
+   * approval through the active session's `addToolApprovalResponse`.
+   */
+  approvalResponder: ApprovalResponder | null;
+  setApprovalResponder: (fn: ApprovalResponder | null) => void;
+  respondToApproval: (approvalId: string, approved: boolean) => void;
 
   apiKeys: ProviderKeys;
   setApiKeys: (keys: ProviderKeys) => void;
@@ -178,6 +192,13 @@ function makeChat(sessionId: string): Chat<UIMessage> {
 export const useChatStore = create<StoreState>((set, get) => ({
   live: NOOP_LIVE,
   setLive: (live) => set({ live }),
+
+  approvalResponder: null,
+  setApprovalResponder: (fn) => set({ approvalResponder: fn }),
+  respondToApproval: (approvalId, approved) => {
+    const fn = get().approvalResponder;
+    if (fn) fn(approvalId, approved);
+  },
 
   apiKeys: { ...EMPTY_PROVIDER_KEYS },
   setApiKeys: (keys) => set({ apiKeys: keys, agentMeta: IDLE_META }),
