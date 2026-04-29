@@ -1,6 +1,13 @@
 export const KEYRING_SERVICE = "terax-ai";
 
-export type ProviderId = "openai" | "anthropic" | "google" | "xai";
+export type ProviderId =
+  | "openai"
+  | "anthropic"
+  | "google"
+  | "xai"
+  | "cerebras"
+  | "groq"
+  | "lmstudio";
 
 export type ProviderInfo = {
   id: ProviderId;
@@ -39,6 +46,27 @@ export const PROVIDERS: readonly ProviderInfo[] = [
     keyPrefix: "xai-",
     consoleUrl: "https://console.x.ai/",
   },
+  {
+    id: "cerebras",
+    label: "Cerebras",
+    keyringAccount: "cerebras-api-key",
+    keyPrefix: "csk-",
+    consoleUrl: "https://cloud.cerebras.ai/",
+  },
+  {
+    id: "groq",
+    label: "Groq",
+    keyringAccount: "groq-api-key",
+    keyPrefix: "gsk_",
+    consoleUrl: "https://console.groq.com/keys",
+  },
+  {
+    id: "lmstudio",
+    label: "LM Studio",
+    keyringAccount: "",
+    keyPrefix: null,
+    consoleUrl: "https://lmstudio.ai/docs/basics/server",
+  },
 ] as const;
 
 export function getProvider(id: ProviderId): ProviderInfo {
@@ -69,6 +97,12 @@ export const MODELS = [
   // xAI
   { id: "grok-4.20-reasoning", provider: "xai", label: "Grok 4.20 Reasoning", hint: "Reasoning" },
   { id: "grok-4.20-non-reasoning", provider: "xai", label: "Grok 4.20", hint: "Fast" },
+  // Cerebras (autocomplete-tier)
+  { id: "gpt-oss-120b", provider: "cerebras", label: "GPT-OSS 120B", hint: "Cerebras · ultra-fast" },
+  // Groq (autocomplete-tier)
+  { id: "openai/gpt-oss-20b", provider: "groq", label: "GPT-OSS 20B", hint: "Groq · ultra-fast" },
+  // LM Studio (local; model id is user-supplied at runtime)
+  { id: "lmstudio-local", provider: "lmstudio", label: "LM Studio (local)", hint: "Custom local model" },
 ] as const satisfies readonly ModelInfo[];
 
 export type ModelId = (typeof MODELS)[number]["id"];
@@ -80,6 +114,30 @@ export function getModel(id: ModelId): ModelInfo {
 }
 
 export const DEFAULT_MODEL_ID: ModelId = "gpt-4o-mini";
+
+/** Providers that do not require an API key (e.g. local servers). */
+export const KEYLESS_PROVIDERS: readonly ProviderId[] = ["lmstudio"] as const;
+
+export function providerNeedsKey(id: ProviderId): boolean {
+  return !KEYLESS_PROVIDERS.includes(id);
+}
+
+/** Providers eligible for the editor's inline autocomplete (latency-critical). */
+export type AutocompleteProviderId = "cerebras" | "groq" | "lmstudio";
+
+export const AUTOCOMPLETE_PROVIDERS: readonly AutocompleteProviderId[] = [
+  "cerebras",
+  "groq",
+  "lmstudio",
+] as const;
+
+export const DEFAULT_AUTOCOMPLETE_MODEL: Record<AutocompleteProviderId, string> = {
+  cerebras: "gpt-oss-120b",
+  groq: "openai/gpt-oss-20b",
+  lmstudio: "qwen2.5-coder-7b-instruct",
+};
+
+export const LMSTUDIO_DEFAULT_BASE_URL = "http://localhost:1234/v1";
 export const MAX_AGENT_STEPS = 24;
 export const TERMINAL_BUFFER_LINES = 300;
 

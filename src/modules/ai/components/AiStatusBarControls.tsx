@@ -15,6 +15,9 @@ import {
   ArrowUpIcon,
   ChatGptIcon,
   ClaudeIcon,
+  ComputerIcon,
+  CpuIcon,
+  FlashIcon,
   GoogleGeminiIcon,
   Grok02Icon,
   Message01Icon,
@@ -38,6 +41,9 @@ const PROVIDER_ICON = {
   anthropic: ClaudeIcon,
   google: GoogleGeminiIcon,
   xai: Grok02Icon,
+  cerebras: CpuIcon,
+  groq: FlashIcon,
+  lmstudio: ComputerIcon,
 } as const satisfies Record<ProviderId, typeof ChatGptIcon>;
 
 export function AiOpenButton({ onOpen }: { onOpen: () => void }) {

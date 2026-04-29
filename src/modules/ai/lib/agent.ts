@@ -1,6 +1,9 @@
 import { createAnthropic } from "@ai-sdk/anthropic";
+import { createCerebras } from "@ai-sdk/cerebras";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
+import { createGroq } from "@ai-sdk/groq";
 import { createOpenAI } from "@ai-sdk/openai";
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { createXai } from "@ai-sdk/xai";
 import {
   Experimental_Agent as Agent,
@@ -10,7 +13,9 @@ import {
 import {
   DEFAULT_MODEL_ID,
   getModel,
+  LMSTUDIO_DEFAULT_BASE_URL,
   MAX_AGENT_STEPS,
+  providerNeedsKey,
   SYSTEM_PROMPT,
   type ModelId,
   type ProviderId,
@@ -24,6 +29,8 @@ type AgentDeps = {
   customInstructions?: string;
   toolContext: ToolContext;
   onStep?: (step: string | null) => void;
+  /** Override base URL for OpenAI-compatible providers (LM Studio). */
+  lmstudioBaseURL?: string;
 };
 
 const TOOL_LABELS: Record<string, (input: Record<string, unknown>) => string> = {
@@ -46,26 +53,53 @@ function ellipsize(s: string, max: number): string {
   return s.length > max ? `${s.slice(0, max - 1)}…` : s;
 }
 
-function buildModel(modelId: ModelId, keys: ProviderKeys) {
-  const m = getModel(modelId);
-  const key = keys[m.provider];
-  if (!key) {
-    throw new Error(`No API key configured for ${m.provider}. Open Settings → AI to add one.`);
+export type BuildModelOptions = {
+  /** Override the model id (used by autocomplete with custom LM Studio model). */
+  modelIdOverride?: string;
+  /** Override LM Studio base URL. Defaults to `LMSTUDIO_DEFAULT_BASE_URL`. */
+  lmstudioBaseURL?: string;
+};
+
+export function buildLanguageModel(
+  provider: ProviderId,
+  keys: ProviderKeys,
+  resolvedModelId: string,
+  options: BuildModelOptions = {},
+) {
+  if (providerNeedsKey(provider) && !keys[provider]) {
+    throw new Error(
+      `No API key configured for ${provider}. Open Settings → AI to add one.`,
+    );
   }
-  switch (m.provider) {
+  const key = keys[provider] ?? "";
+  switch (provider) {
     case "openai":
-      return createOpenAI({ apiKey: key })(m.id);
+      return createOpenAI({ apiKey: key })(resolvedModelId);
     case "anthropic":
-      return createAnthropic({ apiKey: key })(m.id);
+      return createAnthropic({ apiKey: key })(resolvedModelId);
     case "google":
-      return createGoogleGenerativeAI({ apiKey: key })(m.id);
+      return createGoogleGenerativeAI({ apiKey: key })(resolvedModelId);
     case "xai":
-      return createXai({ apiKey: key })(m.id);
+      return createXai({ apiKey: key })(resolvedModelId);
+    case "cerebras":
+      return createCerebras({ apiKey: key })(resolvedModelId);
+    case "groq":
+      return createGroq({ apiKey: key })(resolvedModelId);
+    case "lmstudio":
+      return createOpenAICompatible({
+        name: "lmstudio",
+        baseURL: options.lmstudioBaseURL ?? LMSTUDIO_DEFAULT_BASE_URL,
+      })(resolvedModelId);
     default: {
-      const _exhaustive: never = m.provider;
+      const _exhaustive: never = provider;
       throw new Error(`Unsupported provider: ${_exhaustive as ProviderId}`);
     }
   }
+}
+
+function buildModel(modelId: ModelId, keys: ProviderKeys, lmstudioBaseURL?: string) {
+  const m = getModel(modelId);
+  return buildLanguageModel(m.provider, keys, m.id, { lmstudioBaseURL });
 }
 
 export function createTeraxAgent({
@@ -74,13 +108,14 @@ export function createTeraxAgent({
   customInstructions,
   toolContext,
   onStep,
+  lmstudioBaseURL,
 }: AgentDeps) {
   const trimmed = customInstructions?.trim();
   const instructions = trimmed
     ? `${SYSTEM_PROMPT}\n\nUSER CUSTOM INSTRUCTIONS — follow these unless they conflict with safety rules above:\n${trimmed}`
     : SYSTEM_PROMPT;
   return new Agent({
-    model: buildModel(modelId, keys),
+    model: buildModel(modelId, keys, lmstudioBaseURL),
     instructions,
     tools: buildTools(toolContext),
     stopWhen: stepCountIs(MAX_AGENT_STEPS),

@@ -18,6 +18,11 @@ import {
 import { buildSharedExtensions, languageCompartment } from "./lib/extensions";
 import { resolveLanguage } from "./lib/languageResolver";
 import { useDocument } from "./lib/useDocument";
+import { inlineCompletion } from "./lib/autocomplete/inlineExtension";
+import { getAllKeys } from "@/modules/ai/lib/keyring";
+import type { ProviderKeys } from "@/modules/ai/lib/keyring";
+import { EMPTY_PROVIDER_KEYS } from "@/modules/ai/lib/keyring";
+import { onKeysChanged } from "@/modules/settings/store";
 
 export type EditorPaneHandle = {
   setQuery: (q: string) => void;
@@ -49,6 +54,27 @@ export const EditorPane = forwardRef<EditorPaneHandle, Props>(
     reloadRef.current = reload;
     const cmRef = useRef<ReactCodeMirrorRef>(null);
     const editorThemeId = usePreferencesStore((s) => s.editorTheme);
+    const languageRef = useRef<string | null>(null);
+    const keysRef = useRef<ProviderKeys>(EMPTY_PROVIDER_KEYS);
+
+    useEffect(() => {
+      let cancelled = false;
+      void getAllKeys().then((k) => {
+        if (!cancelled) keysRef.current = k;
+      });
+      let unlisten: (() => void) | undefined;
+      void onKeysChanged(() => {
+        void getAllKeys().then((k) => {
+          if (!cancelled) keysRef.current = k;
+        });
+      }).then((un) => {
+        unlisten = un;
+      });
+      return () => {
+        cancelled = true;
+        unlisten?.();
+      };
+    }, []);
     const themeExt = EDITOR_THEME_EXT[editorThemeId] ?? EDITOR_THEME_EXT.atomone;
 
     // Stabilize save + onSaved via refs so the extensions array never changes
@@ -59,10 +85,27 @@ export const EditorPane = forwardRef<EditorPaneHandle, Props>(
     const onSavedRef = useRef(onSaved);
     onSavedRef.current = onSaved;
 
+    const pathRef = useRef(path);
+    pathRef.current = path;
+
     const extensions = useMemo(
       () => [
         ...buildSharedExtensions(),
         languageCompartment.of([]),
+        inlineCompletion({
+          getPrefs: () => {
+            const s = usePreferencesStore.getState();
+            return {
+              enabled: s.autocompleteEnabled,
+              provider: s.autocompleteProvider,
+              modelId: s.autocompleteModelId,
+              keys: keysRef.current,
+              lmstudioBaseURL: s.lmstudioBaseURL,
+            };
+          },
+          getPath: () => pathRef.current,
+          getLanguage: () => languageRef.current,
+        }),
         keymap.of([
           {
             key: "Mod-s",
@@ -82,6 +125,8 @@ export const EditorPane = forwardRef<EditorPaneHandle, Props>(
 
     useEffect(() => {
       let cancelled = false;
+      const ext = path.split(".").pop()?.toLowerCase() ?? null;
+      languageRef.current = ext;
       resolveLanguage(path).then((ext) => {
         if (cancelled) return;
         const view = cmRef.current?.view;

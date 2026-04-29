@@ -20,6 +20,7 @@ type Deps = {
   getModelId: () => ModelId;
   getCustomInstructions: () => string;
   getLive: () => LiveSnapshot;
+  getLmstudioBaseURL?: () => string | undefined;
   onStep?: (step: string | null) => void;
 };
 
@@ -35,6 +36,7 @@ export function createContextAwareTransport(deps: Deps) {
         customInstructions: deps.getCustomInstructions(),
         toolContext: deps.toolContext,
         onStep: deps.onStep,
+        lmstudioBaseURL: deps.getLmstudioBaseURL?.(),
       });
       const base = new DirectChatTransport({ agent });
       const augmented = injectContext(options.messages, deps.getLive());
@@ -50,6 +52,7 @@ export function createContextAwareTransport(deps: Deps) {
         customInstructions: deps.getCustomInstructions(),
         toolContext: deps.toolContext,
         onStep: deps.onStep,
+        lmstudioBaseURL: deps.getLmstudioBaseURL?.(),
       });
       const base = new DirectChatTransport({ agent });
       type ReconnectArg = Parameters<typeof base.reconnectToStream>[0];

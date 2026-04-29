@@ -1,6 +1,12 @@
 import { emit, listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { LazyStore } from "@tauri-apps/plugin-store";
-import { DEFAULT_MODEL_ID, type ModelId } from "@/modules/ai/config";
+import {
+  DEFAULT_AUTOCOMPLETE_MODEL,
+  DEFAULT_MODEL_ID,
+  LMSTUDIO_DEFAULT_BASE_URL,
+  type AutocompleteProviderId,
+  type ModelId,
+} from "@/modules/ai/config";
 
 export type ThemePref = "system" | "light" | "dark";
 
@@ -37,6 +43,10 @@ export type Preferences = {
   customInstructions: string;
   autostart: boolean;
   restoreWindowState: boolean;
+  autocompleteEnabled: boolean;
+  autocompleteProvider: AutocompleteProviderId;
+  autocompleteModelId: string;
+  lmstudioBaseURL: string;
 };
 
 const STORE_PATH = "terax-settings.json";
@@ -46,6 +56,10 @@ const KEY_EDITOR_THEME = "editorTheme";
 const KEY_CUSTOM_INSTRUCTIONS = "customInstructions";
 const KEY_AUTOSTART = "autostart";
 const KEY_RESTORE_WINDOW = "restoreWindowState";
+const KEY_AUTOCOMPLETE_ENABLED = "autocompleteEnabled";
+const KEY_AUTOCOMPLETE_PROVIDER = "autocompleteProvider";
+const KEY_AUTOCOMPLETE_MODEL = "autocompleteModelId";
+const KEY_LMSTUDIO_BASE_URL = "lmstudioBaseURL";
 
 export const DEFAULT_PREFERENCES: Preferences = {
   theme: "system",
@@ -54,6 +68,10 @@ export const DEFAULT_PREFERENCES: Preferences = {
   customInstructions: "",
   autostart: false,
   restoreWindowState: true,
+  autocompleteEnabled: false,
+  autocompleteProvider: "cerebras",
+  autocompleteModelId: DEFAULT_AUTOCOMPLETE_MODEL.cerebras,
+  lmstudioBaseURL: LMSTUDIO_DEFAULT_BASE_URL,
 };
 
 const store = new LazyStore(STORE_PATH, { defaults: {}, autoSave: 200 });
@@ -66,6 +84,10 @@ export async function loadPreferences(): Promise<Preferences> {
     customInstructions,
     autostart,
     restoreWindowState,
+    autocompleteEnabled,
+    autocompleteProvider,
+    autocompleteModelId,
+    lmstudioBaseURL,
   ] = await Promise.all([
     store.get<ThemePref>(KEY_THEME),
     store.get<ModelId>(KEY_DEFAULT_MODEL),
@@ -73,6 +95,10 @@ export async function loadPreferences(): Promise<Preferences> {
     store.get<string>(KEY_CUSTOM_INSTRUCTIONS),
     store.get<boolean>(KEY_AUTOSTART),
     store.get<boolean>(KEY_RESTORE_WINDOW),
+    store.get<boolean>(KEY_AUTOCOMPLETE_ENABLED),
+    store.get<AutocompleteProviderId>(KEY_AUTOCOMPLETE_PROVIDER),
+    store.get<string>(KEY_AUTOCOMPLETE_MODEL),
+    store.get<string>(KEY_LMSTUDIO_BASE_URL),
   ]);
   return {
     theme: theme ?? DEFAULT_PREFERENCES.theme,
@@ -83,6 +109,14 @@ export async function loadPreferences(): Promise<Preferences> {
     autostart: autostart ?? DEFAULT_PREFERENCES.autostart,
     restoreWindowState:
       restoreWindowState ?? DEFAULT_PREFERENCES.restoreWindowState,
+    autocompleteEnabled:
+      autocompleteEnabled ?? DEFAULT_PREFERENCES.autocompleteEnabled,
+    autocompleteProvider:
+      autocompleteProvider ?? DEFAULT_PREFERENCES.autocompleteProvider,
+    autocompleteModelId:
+      autocompleteModelId ?? DEFAULT_PREFERENCES.autocompleteModelId,
+    lmstudioBaseURL:
+      lmstudioBaseURL ?? DEFAULT_PREFERENCES.lmstudioBaseURL,
   };
 }
 
@@ -116,6 +150,28 @@ export async function setRestoreWindowState(value: boolean): Promise<void> {
   await store.save();
 }
 
+export async function setAutocompleteEnabled(value: boolean): Promise<void> {
+  await store.set(KEY_AUTOCOMPLETE_ENABLED, value);
+  await store.save();
+}
+
+export async function setAutocompleteProvider(
+  value: AutocompleteProviderId,
+): Promise<void> {
+  await store.set(KEY_AUTOCOMPLETE_PROVIDER, value);
+  await store.save();
+}
+
+export async function setAutocompleteModelId(value: string): Promise<void> {
+  await store.set(KEY_AUTOCOMPLETE_MODEL, value);
+  await store.save();
+}
+
+export async function setLmstudioBaseURL(value: string): Promise<void> {
+  await store.set(KEY_LMSTUDIO_BASE_URL, value);
+  await store.save();
+}
+
 export type PrefKey = keyof Preferences;
 
 /** Subscribe to changes from any window (settings → main). */
@@ -129,6 +185,10 @@ export function onPreferencesChange(
     [KEY_CUSTOM_INSTRUCTIONS]: "customInstructions",
     [KEY_AUTOSTART]: "autostart",
     [KEY_RESTORE_WINDOW]: "restoreWindowState",
+    [KEY_AUTOCOMPLETE_ENABLED]: "autocompleteEnabled",
+    [KEY_AUTOCOMPLETE_PROVIDER]: "autocompleteProvider",
+    [KEY_AUTOCOMPLETE_MODEL]: "autocompleteModelId",
+    [KEY_LMSTUDIO_BASE_URL]: "lmstudioBaseURL",
   };
   return store.onChange<unknown>((key, value) => {
     const mapped = map[key];
