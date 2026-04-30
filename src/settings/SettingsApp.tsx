@@ -1,46 +1,41 @@
-import { cn } from "@/lib/utils";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { SettingsTab } from "@/modules/settings/openSettingsWindow";
 import { usePreferencesStore } from "@/modules/settings/preferences";
 import {
+  AiScanIcon,
   InformationCircleIcon,
-  PlugSocketIcon,
   Settings01Icon,
-  SparklesIcon,
+  UserMultiple02Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useEffect, useState } from "react";
 import { AboutSection } from "./sections/AboutSection";
-import { AiSection } from "./sections/AiSection";
-import { ConnectionsSection } from "./sections/ConnectionsSection";
+import { AgentsSection } from "./sections/AgentsSection";
 import { GeneralSection } from "./sections/GeneralSection";
+import { ModelsSection } from "./sections/ModelsSection";
 
-type AnyTab = SettingsTab | "connections";
+const TABS: { id: SettingsTab; label: string; icon: typeof Settings01Icon }[] =
+  [
+    { id: "general", label: "General", icon: Settings01Icon },
+    { id: "models", label: "Models", icon: AiScanIcon },
+    { id: "agents", label: "Agents", icon: UserMultiple02Icon },
+    { id: "about", label: "About", icon: InformationCircleIcon },
+  ];
 
-type TabDef = {
-  id: AnyTab;
-  label: string;
-  icon: typeof Settings01Icon;
-};
+const VALID_TABS: SettingsTab[] = ["general", "models", "agents", "about"];
 
-const TABS: TabDef[] = [
-  { id: "general", label: "General", icon: Settings01Icon },
-  { id: "ai", label: "AI", icon: SparklesIcon },
-  { id: "connections", label: "Connections", icon: PlugSocketIcon },
-  { id: "about", label: "About", icon: InformationCircleIcon },
-];
-
-function readInitialTab(): AnyTab {
+function readInitialTab(): SettingsTab {
   if (typeof window === "undefined") return "general";
   const url = new URL(window.location.href);
   const t = url.searchParams.get("tab");
-  if (t === "general" || t === "ai" || t === "about" || t === "connections") {
-    return t;
-  }
+  // Back-compat: legacy "ai" / "connections" → "models".
+  if (t === "ai" || t === "connections") return "models";
+  if (t && (VALID_TABS as string[]).includes(t)) return t as SettingsTab;
   return "general";
 }
 
 export function SettingsApp() {
-  const [active, setActive] = useState<AnyTab>(readInitialTab);
+  const [active, setActive] = useState<SettingsTab>(readInitialTab);
   const init = usePreferencesStore((s) => s.init);
 
   useEffect(() => {
@@ -50,13 +45,12 @@ export function SettingsApp() {
   useEffect(() => {
     const onTab = (e: Event) => {
       const detail = (e as CustomEvent<string>).detail;
-      if (
-        detail === "general" ||
-        detail === "ai" ||
-        detail === "about" ||
-        detail === "connections"
-      ) {
-        setActive(detail);
+      if (detail === "ai" || detail === "connections") {
+        setActive("models");
+        return;
+      }
+      if ((VALID_TABS as string[]).includes(detail)) {
+        setActive(detail as SettingsTab);
       }
     };
     window.addEventListener("terax:settings-tab", onTab);
@@ -67,36 +61,35 @@ export function SettingsApp() {
     <div className="flex h-screen flex-col overflow-hidden bg-background text-foreground select-none">
       <header
         data-tauri-drag-region
-        className="flex h-11 shrink-0 items-center gap-1 border-b border-border/60 bg-card/60 pr-3 pl-22"
+        className="flex h-11 shrink-0 items-center border-b border-border/60 bg-card/60 pr-3 pl-22"
       >
-        <nav
-          className="flex flex-1 items-center justify-center gap-0.5"
+        <Tabs
+          value={active}
+          onValueChange={(v) => setActive(v as SettingsTab)}
+          orientation="horizontal"
+          className="flex-1 items-center"
           data-tauri-drag-region
         >
-          {TABS.map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              onClick={() => setActive(t.id)}
-              className={cn(
-                "flex h-7 items-center gap-1.5 rounded-md px-2.5 text-[11.5px] transition-colors",
-                active === t.id
-                  ? "bg-accent text-foreground"
-                  : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
-              )}
-            >
-              <HugeiconsIcon icon={t.icon} size={13} strokeWidth={1.75} />
-              <span>{t.label}</span>
-            </button>
-          ))}
-        </nav>
+          <TabsList className="mx-auto h-7 bg-muted/40">
+            {TABS.map((t) => (
+              <TabsTrigger
+                key={t.id}
+                value={t.id}
+                className="h-6 gap-1.5 px-2.5 text-[11.5px]"
+              >
+                <HugeiconsIcon icon={t.icon} size={12} strokeWidth={1.75} />
+                <span>{t.label}</span>
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
       </header>
 
       <main className="flex min-w-0 flex-1 flex-col overflow-y-auto px-8 pt-6 pb-7">
-        <div className="mx-auto w-full max-w-[560px]">
+        <div className="mx-auto w-full max-w-[640px]">
           {active === "general" && <GeneralSection />}
-          {active === "ai" && <AiSection />}
-          {active === "connections" && <ConnectionsSection />}
+          {active === "models" && <ModelsSection />}
+          {active === "agents" && <AgentsSection />}
           {active === "about" && <AboutSection />}
         </div>
       </main>

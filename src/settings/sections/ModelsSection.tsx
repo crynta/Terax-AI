@@ -5,10 +5,9 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Textarea } from "@/components/ui/textarea";
-import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import { cn } from "@/lib/utils";
 import {
   AUTOCOMPLETE_PROVIDERS,
   DEFAULT_AUTOCOMPLETE_MODEL,
@@ -28,23 +27,21 @@ import {
   setAutocompleteEnabled,
   setAutocompleteModelId,
   setAutocompleteProvider,
-  setCustomInstructions,
   setDefaultModel,
   setLmstudioBaseURL,
 } from "@/modules/settings/store";
 import { ArrowDown01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { ProviderIcon } from "../components/ProviderIcon";
 import { ProviderKeyCard } from "../components/ProviderKeyCard";
 import { SectionHeader } from "../components/SectionHeader";
 
 type KeysMap = Record<ProviderId, string | null>;
 
-export function AiSection() {
+export function ModelsSection() {
   const [keys, setKeys] = useState<KeysMap | null>(null);
   const defaultModel = usePreferencesStore((s) => s.defaultModelId);
-  const customInstructions = usePreferencesStore((s) => s.customInstructions);
 
   useEffect(() => {
     void getAllKeys().then(setKeys);
@@ -67,12 +64,15 @@ export function AiSection() {
   }
 
   const defaultModelInfo = getModel(defaultModel);
+  const configuredCount = PROVIDERS.filter(
+    (p) => providerNeedsKey(p.id) && !!keys[p.id],
+  ).length;
 
   return (
     <div className="flex flex-col gap-7">
       <SectionHeader
-        title="AI"
-        description="Bring your own keys. They are stored in your OS keychain and used only by Terax."
+        title="Models"
+        description="Bring your own keys. They live in your OS keychain and are used only by Terax."
       />
 
       <div className="flex flex-col gap-2">
@@ -141,8 +141,13 @@ export function AiSection() {
       </div>
 
       <div className="flex flex-col gap-2">
-        <Label>API keys</Label>
-        <div className="flex flex-col gap-2">
+        <div className="flex items-baseline justify-between">
+          <Label>API keys</Label>
+          <span className="text-[10.5px] text-muted-foreground">
+            {configuredCount} of {PROVIDERS.filter((p) => providerNeedsKey(p.id)).length} configured
+          </span>
+        </div>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           {PROVIDERS.filter((p) => providerNeedsKey(p.id)).map((p) => (
             <ProviderKeyCard
               key={p.id}
@@ -156,56 +161,6 @@ export function AiSection() {
       </div>
 
       <AutocompleteBlock keys={keys} />
-
-      <CustomInstructionsBlock value={customInstructions} />
-    </div>
-  );
-}
-
-function CustomInstructionsBlock({ value }: { value: string }) {
-  const [draft, setDraft] = useState(value);
-  const [savedTick, setSavedTick] = useState(0);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const hadFirstSync = useRef(false);
-
-  // Sync external changes (cross-window updates) into the textarea, but only
-  // when the local draft is up to date — don't clobber typing.
-  useEffect(() => {
-    if (!hadFirstSync.current) {
-      hadFirstSync.current = true;
-      setDraft(value);
-      return;
-    }
-  }, [value]);
-
-  const queueSave = (next: string) => {
-    setDraft(next);
-    if (timerRef.current) clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(() => {
-      void setCustomInstructions(next).then(() => {
-        setSavedTick((n) => n + 1);
-      });
-    }, 350);
-  };
-
-  return (
-    <div className="flex flex-col gap-2">
-      <div className="flex items-center justify-between">
-        <Label>Custom instructions</Label>
-        {savedTick > 0 ? (
-          <span className="text-[10px] text-muted-foreground">Saved</span>
-        ) : null}
-      </div>
-      <Textarea
-        value={draft}
-        onChange={(e) => queueSave(e.target.value)}
-        placeholder="e.g. Always reply in concise bullet points. Prefer pnpm over npm. My machine is an M-series Mac."
-        className="min-h-[120px] resize-y bg-card/60 font-sans text-[12px] leading-relaxed"
-      />
-      <p className="text-[10.5px] text-muted-foreground">
-        Appended to the system prompt for every conversation, after Terax's core
-        rules.
-      </p>
     </div>
   );
 }
@@ -227,8 +182,6 @@ function AutocompleteBlock({ keys }: { keys: KeysMap }) {
 
   const onProviderChange = (next: AutocompleteProviderId) => {
     void setAutocompleteProvider(next);
-    // If the user hasn't customized the model id from a known default,
-    // swap to the new provider's default for ergonomics.
     const knownDefaults = Object.values(DEFAULT_AUTOCOMPLETE_MODEL);
     if (knownDefaults.includes(modelId)) {
       void setAutocompleteModelId(DEFAULT_AUTOCOMPLETE_MODEL[next]);

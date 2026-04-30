@@ -1,18 +1,39 @@
 import { Button } from "@/components/ui/button";
+import { GithubIcon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 import { getName, getVersion } from "@tauri-apps/api/app";
+import { arch, platform } from "@tauri-apps/plugin-os";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useEffect, useState } from "react";
 import { SectionHeader } from "../components/SectionHeader";
 
-const REPO_URL = "https://github.com/crynta/terax";
+const REPO_URL = "https://github.com/crynta/terax-ai";
+
+const PLATFORM_LABEL: Record<string, string> = {
+  macos: "macOS",
+  windows: "Windows",
+  linux: "Linux",
+  ios: "iOS",
+  android: "Android",
+  freebsd: "FreeBSD",
+};
 
 export function AboutSection() {
-  const [version, setVersion] = useState<string>("");
-  const [name, setName] = useState<string>("Terax");
+  const [version, setVersion] = useState("");
+  const [name, setName] = useState("Terax");
+  const [build, setBuild] = useState("");
 
   useEffect(() => {
     void getVersion().then(setVersion);
     void getName().then(setName);
+    try {
+      const p = platform();
+      const a = arch();
+      const platformLabel = PLATFORM_LABEL[p] ?? p;
+      setBuild(`${platformLabel} · ${a}`);
+    } catch {
+      setBuild("");
+    }
   }, []);
 
   return (
@@ -21,26 +42,42 @@ export function AboutSection() {
 
       <div className="flex items-center gap-4 rounded-xl border border-border/60 bg-card/60 p-5">
         <img src="/logo.png" alt="" className="size-12" draggable={false} />
-        <div className="flex flex-col">
+        <div className="flex min-w-0 flex-col">
           <span className="text-[15px] font-semibold tracking-tight">
             {name}
           </span>
           <span className="text-[11px] text-muted-foreground">
             Open-source AI-native terminal emulator
           </span>
-          <span className="mt-1 text-[11px] font-mono text-muted-foreground">
-            v{version}
+          <span className="mt-1 font-mono text-[11px] text-muted-foreground">
+            v{version || "—"}
           </span>
         </div>
       </div>
 
-      <dl className="grid grid-cols-[120px_1fr] gap-y-2 text-[12px]">
+      <dl className="grid grid-cols-[110px_1fr] gap-y-2.5 text-[12px]">
+        <dt className="text-muted-foreground">Build</dt>
+        <dd className="font-mono text-[11.5px]">
+          {build ? `${build} · v${version}` : `v${version}`}
+        </dd>
+
         <dt className="text-muted-foreground">Bundle ID</dt>
         <dd className="font-mono text-[11.5px]">app.crynta.terax</dd>
+
         <dt className="text-muted-foreground">License</dt>
         <dd>Apache 2.0</dd>
-        <dt className="text-muted-foreground">Author</dt>
-        <dd>Crynta</dd>
+
+        <dt className="text-muted-foreground">Source code</dt>
+        <dd>
+          <button
+            type="button"
+            onClick={() => void openUrl(REPO_URL)}
+            className="inline-flex items-center gap-1.5 rounded-md text-[12px] underline-offset-2 hover:text-foreground hover:underline"
+          >
+            <HugeiconsIcon icon={GithubIcon} size={12} strokeWidth={1.75} />
+            crynta/terax-ai
+          </button>
+        </dd>
       </dl>
 
       <div className="flex gap-2">
@@ -48,8 +85,17 @@ export function AboutSection() {
           variant="outline"
           size="sm"
           onClick={() => void openUrl(REPO_URL)}
+          className="gap-1.5"
         >
-          GitHub
+          <HugeiconsIcon icon={GithubIcon} size={12} strokeWidth={1.75} />
+          View on GitHub
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => void openUrl(`${REPO_URL}/issues/new`)}
+        >
+          Report an issue
         </Button>
       </div>
     </div>

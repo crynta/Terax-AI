@@ -27,6 +27,8 @@ type AgentDeps = {
   keys: ProviderKeys;
   modelId?: ModelId;
   customInstructions?: string;
+  /** Persona / role for this conversation (system prompt addendum). */
+  agentPersona?: { name: string; instructions: string } | null;
   toolContext: ToolContext;
   onStep?: (step: string | null) => void;
   /** Override base URL for OpenAI-compatible providers (LM Studio). */
@@ -106,14 +108,19 @@ export function createTeraxAgent({
   keys,
   modelId = DEFAULT_MODEL_ID,
   customInstructions,
+  agentPersona,
   toolContext,
   onStep,
   lmstudioBaseURL,
 }: AgentDeps) {
-  const trimmed = customInstructions?.trim();
-  const instructions = trimmed
-    ? `${SYSTEM_PROMPT}\n\nUSER CUSTOM INSTRUCTIONS — follow these unless they conflict with safety rules above:\n${trimmed}`
-    : SYSTEM_PROMPT;
+  const trimmedCustom = customInstructions?.trim();
+  const personaBlock = agentPersona?.instructions.trim()
+    ? `\n\n## ACTIVE AGENT — ${agentPersona.name}\n${agentPersona.instructions.trim()}`
+    : "";
+  const customBlock = trimmedCustom
+    ? `\n\n## USER CUSTOM INSTRUCTIONS — follow unless they conflict with safety rules above\n${trimmedCustom}`
+    : "";
+  const instructions = `${SYSTEM_PROMPT}${personaBlock}${customBlock}`;
   return new Agent({
     model: buildModel(modelId, keys, lmstudioBaseURL),
     instructions,

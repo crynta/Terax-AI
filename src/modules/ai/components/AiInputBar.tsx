@@ -9,18 +9,113 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { AnimatePresence, motion } from "motion/react";
-import { useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useComposer, type FileAttachment } from "../lib/composer";
 import { useChatStore } from "../store/chatStore";
+import { useSnippetsStore } from "../store/snippetsStore";
+import { AgentSwitcher } from "./AgentSwitcher";
+import { SnippetPicker } from "./SnippetPicker";
+
+type SnippetTrigger = {
+  // Caret-relative coords + token range in the textarea value.
+  start: number;
+  end: number;
+  query: string;
+};
+
+/**
+ * Detect a `#partial` token directly preceding the caret (no whitespace
+ * between `#` and the caret). Returns null when there is no active token —
+ * e.g. caret outside, char before `#` isn't whitespace/start, or token has
+ * been "closed" by a space.
+ */
+function detectSnippetTrigger(
+  value: string,
+  caret: number,
+): SnippetTrigger | null {
+  // Walk back from caret looking for `#` with whitespace (or start) before it.
+  for (let i = caret - 1; i >= 0; i--) {
+    const ch = value[i];
+    if (ch === "#") {
+      const prev = i === 0 ? " " : value[i - 1];
+      if (!/\s/.test(prev)) return null;
+      const slice = value.slice(i + 1, caret);
+      // Must be empty or [a-z0-9-] only.
+      if (!/^[a-z0-9-]*$/i.test(slice)) return null;
+      return { start: i, end: caret, query: slice.toLowerCase() };
+    }
+    // Stop on whitespace or other non-handle chars.
+    if (/\s/.test(ch)) return null;
+    if (!/[a-z0-9-]/i.test(ch)) return null;
+  }
+  return null;
+}
 
 export function AiInputBar() {
   const c = useComposer();
   const step = useChatStore((s) => s.agentMeta.step);
   const status = useChatStore((s) => s.agentMeta.status);
+  const snippets = useSnippetsStore((s) => s.snippets);
+
+  const [trigger, setTrigger] = useState<SnippetTrigger | null>(null);
+  const [activeIndex, setActiveIndex] = useState(0);
 
   useEffect(() => {
     autoresize(c.textareaRef.current);
   }, [c.value, c.textareaRef]);
+
+  // Recompute trigger on every value change OR caret movement.
+  const updateTrigger = () => {
+    const el = c.textareaRef.current;
+    if (!el) {
+      setTrigger(null);
+      return;
+    }
+    setTrigger(detectSnippetTrigger(c.value, el.selectionStart ?? 0));
+  };
+
+  useEffect(updateTrigger, [c.value, c.textareaRef]);
+
+  const filteredSnippets = useMemo(() => {
+    if (!trigger) return [];
+    const q = trigger.query;
+    if (!q) return snippets;
+    return snippets.filter(
+      (s) =>
+        s.handle.includes(q) ||
+        s.name.toLowerCase().includes(q) ||
+        s.description.toLowerCase().includes(q),
+    );
+  }, [trigger, snippets]);
+
+  // Keep activeIndex in range as the filtered list shrinks/grows.
+  useEffect(() => {
+    if (activeIndex >= filteredSnippets.length) setActiveIndex(0);
+  }, [filteredSnippets.length, activeIndex]);
+
+  const pickerOpen = trigger !== null;
+
+  const onPickSnippet = (handle: string) => {
+    if (!trigger) return;
+    const before = c.value.slice(0, trigger.start);
+    const after = c.value.slice(trigger.end);
+    const next = `${before}#${handle} ${after}`;
+    c.setValue(next);
+    setTrigger(null);
+    setActiveIndex(0);
+    requestAnimationFrame(() => {
+      const el = c.textareaRef.current;
+      if (!el) return;
+      const caret = before.length + handle.length + 2;
+      el.focus();
+      el.setSelectionRange(caret, caret);
+    });
+  };
+
+  const pickActive = () => {
+    const s = filteredSnippets[activeIndex];
+    if (s) onPickSnippet(s.handle);
+  };
 
   const statusLabel =
     status === "awaiting-approval"
@@ -39,7 +134,7 @@ export function AiInputBar() {
     <div className="shrink-0 border-t border-border/60 bg-card/40 px-3 py-2">
       <div
         className={cn(
-          "flex flex-col gap-1.5 rounded-lg  px-1 py-1",
+          "flex flex-col gap-1.5 rounded-lg px-1 py-1",
           "transition-colors focus-within:border-border",
         )}
       >
@@ -50,13 +145,42 @@ export function AiInputBar() {
             ref={c.textareaRef}
             value={c.value}
             onChange={(e) => c.setValue(e.target.value)}
+            onKeyUp={updateTrigger}
+            onClick={updateTrigger}
+            onSelect={updateTrigger}
             onKeyDown={(e) => {
+              if (pickerOpen) {
+                if (e.key === "ArrowDown") {
+                  e.preventDefault();
+                  setActiveIndex((i) =>
+                    Math.min(i + 1, Math.max(0, filteredSnippets.length - 1)),
+                  );
+                  return;
+                }
+                if (e.key === "ArrowUp") {
+                  e.preventDefault();
+                  setActiveIndex((i) => Math.max(0, i - 1));
+                  return;
+                }
+                if (e.key === "Tab" || e.key === "Enter") {
+                  if (filteredSnippets.length > 0) {
+                    e.preventDefault();
+                    pickActive();
+                    return;
+                  }
+                }
+                if (e.key === "Escape") {
+                  e.preventDefault();
+                  setTrigger(null);
+                  return;
+                }
+              }
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
                 c.submit();
               }
             }}
-            placeholder="Ask Terax — Shift+Enter for newline"
+            placeholder="Ask Terax — Shift+Enter for newline · # for snippets"
             rows={1}
             disabled={c.isBusy}
             className={cn(
@@ -76,6 +200,19 @@ export function AiInputBar() {
               <Kbd className="h-4 min-w-4 px-1 text-[10px]">⌘I</Kbd>
             </KbdGroup>
           </button>
+        </div>
+
+        <div className="relative flex items-center justify-between gap-2 px-0.5">
+          <div className="flex items-center gap-1.5">
+            <AgentSwitcher />
+          </div>
+          <SnippetPicker
+            open={pickerOpen}
+            snippets={filteredSnippets}
+            activeIndex={activeIndex}
+            onPick={onPickSnippet}
+            onHover={setActiveIndex}
+          />
         </div>
 
         <AnimatePresence initial={false}>

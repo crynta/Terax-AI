@@ -1,3 +1,4 @@
+import { invoke } from "@tauri-apps/api/core";
 import {
   createContext,
   useContext,
@@ -6,7 +7,9 @@ import {
   useState,
 } from "react";
 import { useWhisperRecording } from "../hooks/useWhisperRecording";
+import { expandSnippetTokens } from "../lib/snippets";
 import { getOrCreateChat, useChatStore } from "../store/chatStore";
+import { useSnippetsStore } from "../store/snippetsStore";
 
 export type FileAttachment = {
   id: string;
@@ -36,6 +39,8 @@ type ComposerCtx = {
   setValue: React.Dispatch<React.SetStateAction<string>>;
   files: FileAttachment[];
   addFiles: (list: FileList | null) => Promise<void>;
+  /** Attach a file by absolute path — used by the file explorer's "Attach to Agent". */
+  attachFileByPath: (path: string) => Promise<void>;
   removeFile: (id: string) => void;
   isBusy: boolean;
   submit: () => void;
@@ -80,6 +85,20 @@ export function AiComposerProvider({ children }: ProviderProps) {
       if (text) setValue((v) => (v ? `${text}${v}` : text));
     }
   }, [focusSignal, pendingPrefill, consumePrefill]);
+
+  // Listen for explorer's "Attach to Agent" event.
+  useEffect(() => {
+    const onAttach = (e: Event) => {
+      const path = (e as CustomEvent<string>).detail;
+      if (typeof path === "string" && path.length > 0) {
+        void attachFileByPath(path);
+      }
+    };
+    window.addEventListener("terax:ai-attach-file", onAttach);
+    return () => window.removeEventListener("terax:ai-attach-file", onAttach);
+    // attachFileByPath is stable for our purposes (closes over setFiles only)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (pendingSelections.length === 0) return;
@@ -127,6 +146,39 @@ export function AiComposerProvider({ children }: ProviderProps) {
   const removeFile = (id: string) =>
     setFiles((prev) => prev.filter((f) => f.id !== id));
 
+  const attachFileByPath = async (path: string) => {
+    try {
+      type ReadResult =
+        | { kind: "text"; content: string; size: number }
+        | { kind: "binary"; size: number }
+        | { kind: "toolarge"; size: number; limit: number };
+      const result = await invoke<ReadResult>("fs_read_file", { path });
+      if (result.kind !== "text") {
+        // Binary/oversize files: skip (could surface a toast in future).
+        console.warn("attachFileByPath: skipped non-text file", path, result);
+        return;
+      }
+      const name = path.split("/").pop() || path;
+      const id = `path-${path}`;
+      setFiles((prev) => {
+        if (prev.some((f) => f.id === id)) return prev;
+        const att: FileAttachment = {
+          id,
+          name,
+          kind: "text",
+          mediaType: "text/plain",
+          text: result.content,
+          size: result.size,
+        };
+        return [...prev, att];
+      });
+      // Open the AI panel & focus the input so the user sees the chip.
+      useChatStore.getState().focusInput();
+    } catch (e) {
+      console.error("attachFileByPath failed:", e);
+    }
+  };
+
   const submit = () => {
     if (isBusy) return;
     const trimmed = value.trim();
@@ -145,10 +197,15 @@ export function AiComposerProvider({ children }: ProviderProps) {
         (f) =>
           `<selection source="${f.source ?? "terminal"}">\n${f.text ?? ""}\n</selection>`,
       );
+    const { body: bodyAfterTokens, blocks: snippetBlocks } = expandSnippetTokens(
+      trimmed,
+      useSnippetsStore.getState().snippets,
+    );
     const composed = [
+      snippetBlocks.join("\n\n"),
       selectionBlocks.join("\n\n"),
       fileBlocks.join("\n\n"),
-      trimmed,
+      bodyAfterTokens,
     ]
       .filter(Boolean)
       .join("\n\n");
@@ -187,6 +244,7 @@ export function AiComposerProvider({ children }: ProviderProps) {
     setValue,
     files,
     addFiles,
+    attachFileByPath,
     removeFile,
     isBusy,
     submit,

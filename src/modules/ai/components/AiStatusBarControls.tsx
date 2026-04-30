@@ -171,7 +171,7 @@ function ModelDropdown() {
 
   const onPick = (id: ModelId, providerId: ProviderId) => {
     if (!apiKeys[providerId]) {
-      void openSettingsWindow("ai");
+      void openSettingsWindow("models");
       return;
     }
     setSelected(id);
@@ -229,7 +229,7 @@ function ModelDropdown() {
                     onClick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
-                      void openSettingsWindow("ai");
+                      void openSettingsWindow("models");
                     }}
                     className="ml-auto rounded-sm px-1 text-[9px] normal-case tracking-normal text-amber-600 underline-offset-2 hover:underline dark:text-amber-400"
                   >

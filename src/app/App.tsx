@@ -16,6 +16,8 @@ import {
 } from "@/modules/ai";
 import { AiInputBarConnect } from "@/modules/ai/components/AiInputBar";
 import { AiComposerProvider } from "@/modules/ai/lib/composer";
+import { useAgentsStore } from "@/modules/ai/store/agentsStore";
+import { useSnippetsStore } from "@/modules/ai/store/snippetsStore";
 import {
   AiDiffStack,
   EditorStack,
@@ -148,6 +150,8 @@ export default function App() {
   const hydrateSessions = useChatStore((s) => s.hydrateSessions);
   useEffect(() => {
     void hydrateSessions();
+    void useAgentsStore.getState().hydrate();
+    void useSnippetsStore.getState().hydrate();
   }, [hydrateSessions]);
 
   const activeTab = tabs.find((t) => t.id === activeId);
@@ -263,7 +267,7 @@ export default function App() {
 
   const togglePanelAndFocus = useCallback(() => {
     if (!hasComposer) {
-      void openSettingsWindow("ai");
+      void openSettingsWindow("models");
       return;
     }
     if (panelOpen) {
@@ -276,9 +280,26 @@ export default function App() {
 
   const attachSelection = useChatStore((s) => s.attachSelection);
 
+  const handleAttachFileToAgent = useCallback(
+    (path: string) => {
+      if (!hasComposer) {
+        void openSettingsWindow("models");
+        return;
+      }
+      // Dispatch a window event the composer listens for. Same pattern as
+      // selections — keeps file-explorer decoupled from the AI module.
+      window.dispatchEvent(
+        new CustomEvent<string>("terax:ai-attach-file", { detail: path }),
+      );
+      openPanel();
+      focusInput(null);
+    },
+    [hasComposer, openPanel, focusInput],
+  );
+
   const askFromSelection = useCallback(() => {
     if (!hasComposer) {
-      void openSettingsWindow("ai");
+      void openSettingsWindow("models");
       return;
     }
     const selection = captureActiveSelection();
@@ -589,6 +610,7 @@ export default function App() {
                     onPathRenamed={handlePathRenamed}
                     onPathDeleted={handlePathDeleted}
                     onRevealInTerminal={cdInNewTab}
+                    onAttachToAgent={handleAttachFileToAgent}
                   />
                 </div>
               </ResizablePanel>
@@ -671,7 +693,7 @@ export default function App() {
                           <AiInputBar />
                         ) : (
                           <AiInputBarConnect
-                            onAdd={() => void openSettingsWindow("ai")}
+                            onAdd={() => void openSettingsWindow("models")}
                           />
                         )}
                       </motion.div>

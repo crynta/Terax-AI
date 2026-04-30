@@ -19,6 +19,7 @@ type Deps = {
   toolContext: ToolContext;
   getModelId: () => ModelId;
   getCustomInstructions: () => string;
+  getAgentPersona: () => { name: string; instructions: string } | null;
   getLive: () => LiveSnapshot;
   getLmstudioBaseURL?: () => string | undefined;
   onStep?: (step: string | null) => void;
@@ -34,6 +35,7 @@ export function createContextAwareTransport(deps: Deps) {
         keys: deps.getKeys(),
         modelId: deps.getModelId(),
         customInstructions: deps.getCustomInstructions(),
+        agentPersona: deps.getAgentPersona(),
         toolContext: deps.toolContext,
         onStep: deps.onStep,
         lmstudioBaseURL: deps.getLmstudioBaseURL?.(),
@@ -50,6 +52,7 @@ export function createContextAwareTransport(deps: Deps) {
         keys: deps.getKeys(),
         modelId: deps.getModelId(),
         customInstructions: deps.getCustomInstructions(),
+        agentPersona: deps.getAgentPersona(),
         toolContext: deps.toolContext,
         onStep: deps.onStep,
         lmstudioBaseURL: deps.getLmstudioBaseURL?.(),
