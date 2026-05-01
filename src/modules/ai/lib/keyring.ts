@@ -3,6 +3,7 @@ import {
   getPassword,
   setPassword,
 } from "tauri-plugin-keyring-api";
+import { invoke } from "@tauri-apps/api/core";
 import {
   getProvider,
   KEYRING_SERVICE,
@@ -52,12 +53,29 @@ export async function clearKey(provider: ProviderId): Promise<void> {
 }
 
 export async function getAllKeys(): Promise<ProviderKeys> {
-  const entries = await Promise.all(
-    PROVIDERS.map(async (p) => [p.id, await getKey(p.id)] as const),
-  );
   const out = { ...EMPTY_PROVIDER_KEYS };
-  for (const [id, v] of entries) out[id] = v;
-  return out;
+  const need = PROVIDERS.filter((p) => providerNeedsKey(p.id));
+  try {
+    // Single IPC roundtrip — the per-provider plugin call would otherwise
+    // fan out across the bridge and add visible latency at startup.
+    const results = await invoke<(string | null)[]>("keyring_get_all", {
+      service: KEYRING_SERVICE,
+      accounts: need.map((p) => p.keyringAccount),
+    });
+    need.forEach((p, i) => {
+      const v = results[i];
+      out[p.id] = v && v.length > 0 ? v : null;
+    });
+    return out;
+  } catch {
+    // Fall back to per-provider lookup if the batch command isn't available
+    // (older binary, dev-rebuild lag).
+    const entries = await Promise.all(
+      need.map(async (p) => [p.id, await getKey(p.id)] as const),
+    );
+    for (const [id, v] of entries) out[id] = v;
+    return out;
+  }
 }
 
 export function hasAnyKey(keys: ProviderKeys): boolean {

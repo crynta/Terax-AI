@@ -6,6 +6,7 @@ import { native } from "../lib/native";
 import { checkReadable } from "../lib/security";
 import { resolvePath } from "../tools/tools";
 import {
+  flushPersist,
   getOrCreateChat,
   useChatStore,
   type AgentRunStatus,
@@ -79,6 +80,17 @@ function Bridge({
     persistMessages(sessionId, messages);
   }, [sessionId, messages, persistMessages]);
 
+  // Flush the debounced write whenever the chat goes idle (or errors),
+  // and on unmount, so a closed app or session-switch never loses the tail.
+  useEffect(() => {
+    if (status !== "submitted" && status !== "streaming") {
+      flushPersist(sessionId);
+    }
+  }, [sessionId, status]);
+  useEffect(() => {
+    return () => flushPersist(sessionId);
+  }, [sessionId]);
+
   const approvalsPending = useMemo(() => {
     let n = 0;
     for (const m of messages) {
@@ -115,9 +127,35 @@ function Bridge({
   // We track which approvalIds have already opened a tab so re-renders don't
   // open duplicates. Reset when the session changes.
   const openedRef = useRef<Set<string>>(new Set());
+  const fileMutationFingerprintRef = useRef<string>("");
   useEffect(() => {
     openedRef.current = new Set();
+    fileMutationFingerprintRef.current = "";
   }, [sessionId]);
+
+  // Cheap fingerprint of file-mutation tool parts only. The diff-tab effect
+  // is the most expensive thing on the streaming path, so we skip it when
+  // only text/reasoning tokens have arrived (the common case).
+  const fileMutationFingerprint = useMemo(() => {
+    let fp = "";
+    for (const m of messages) {
+      if (m.role !== "assistant") continue;
+      for (const p of m.parts as AnyPart[]) {
+        const t = (p as { type?: string }).type;
+        if (
+          t === "tool-write_file" ||
+          t === "tool-edit" ||
+          t === "tool-multi_edit"
+        ) {
+          const state = (p as { state?: string }).state ?? "";
+          const id =
+            (p as { approval?: { id?: string } }).approval?.id ?? "";
+          fp += `${id}:${state}|`;
+        }
+      }
+    }
+    return fp;
+  }, [messages]);
 
   useEffect(() => {
     type Pending = {
@@ -132,6 +170,11 @@ function Bridge({
         | { kind: "edits"; edits: EditOp[] };
     };
     type StatusUpdate = { approvalId: string; status: AiDiffStatus };
+
+    if (fileMutationFingerprint === fileMutationFingerprintRef.current) {
+      return;
+    }
+    fileMutationFingerprintRef.current = fileMutationFingerprint;
 
     const pending: Pending[] = [];
     const statusUpdates: StatusUpdate[] = [];
@@ -211,7 +254,7 @@ function Bridge({
     return () => {
       cancelled = true;
     };
-  }, [messages, openAiDiffTab, setAiDiffStatus]);
+  }, [messages, fileMutationFingerprint, openAiDiffTab, setAiDiffStatus]);
 
   return null;
 }

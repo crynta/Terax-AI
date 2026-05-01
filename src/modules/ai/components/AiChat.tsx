@@ -25,6 +25,7 @@ import type {
   UIMessage,
   UIMessagePart,
 } from "ai";
+import { memo, useCallback } from "react";
 import { AiToolApproval } from "./AiToolApproval";
 
 function CommandSnippet({ name }: { name: string }) {
@@ -83,6 +84,11 @@ export function AiChatView({
   const lastMessage = messages[messages.length - 1];
   const showSpinner = isBusy && lastMessage?.role === "user";
 
+  const onApproval = useCallback(
+    (id: string, approved: boolean) => addToolApprovalResponse({ id, approved }),
+    [addToolApprovalResponse],
+  );
+
   if (messages.length === 0) {
     return (
       <Conversation>
@@ -100,13 +106,7 @@ export function AiChatView({
     <Conversation>
       <ConversationContent className="gap-5 p-3">
         {messages.map((m) => (
-          <RenderedMessage
-            key={m.id}
-            message={m}
-            onApproval={(id, approved) =>
-              addToolApprovalResponse({ id, approved })
-            }
-          />
+          <RenderedMessage key={m.id} message={m} onApproval={onApproval} />
         ))}
         {showSpinner && (
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -135,7 +135,7 @@ export function AiChatView({
   );
 }
 
-function RenderedMessage({
+const RenderedMessage = memo(function RenderedMessage({
   message,
   onApproval,
 }: {
@@ -179,9 +179,9 @@ function RenderedMessage({
       </MessageContent>
     </Message>
   );
-}
+});
 
-function RenderedPart({
+const RenderedPart = memo(function RenderedPart({
   part,
   onApproval,
 }: {
@@ -220,9 +220,9 @@ function RenderedPart({
   }
 
   return null;
-}
+});
 
-function RenderedTool({
+const RenderedTool = memo(function RenderedTool({
   part,
   onApproval,
 }: {
@@ -253,4 +253,4 @@ function RenderedTool({
       errorText={"errorText" in part ? part.errorText : undefined}
     />
   );
-}
+});

@@ -4715,6 +4715,7 @@ dependencies = [
  "grep-regex",
  "grep-searcher",
  "ignore",
+ "keyring",
  "log",
  "portable-pty",
  "serde",

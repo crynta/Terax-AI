@@ -12,6 +12,7 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import type { ToolUIPart } from "ai";
+import { memo } from "react";
 
 type Props = {
   part: Extract<ToolUIPart, { state: "approval-requested" }>;
@@ -29,7 +30,7 @@ const TOOL_META: Record<string, { label: string; icon: typeof FilePlusIcon }> =
     bash_background: { label: "Spawn background process", icon: TerminalIcon },
   };
 
-export function AiToolApproval({ part, toolName, onRespond }: Props) {
+function AiToolApprovalImpl({ part, toolName, onRespond }: Props) {
   const meta = TOOL_META[toolName];
   const label = meta?.label ?? toolName;
   const Icon = meta?.icon ?? ToolsIcon;
@@ -81,6 +82,17 @@ export function AiToolApproval({ part, toolName, onRespond }: Props) {
   );
 }
 
+export const AiToolApproval = memo(AiToolApprovalImpl, (a, b) => {
+  // The approval card never changes content for a given approvalId — once
+  // the model has emitted the approval-requested part with its input, we
+  // don't want to re-render on every downstream token.
+  return (
+    a.toolName === b.toolName &&
+    a.part.approval.id === b.part.approval.id &&
+    a.onRespond === b.onRespond
+  );
+});
+
 function PreviewBlock({
   toolName,
   input,
@@ -107,33 +119,37 @@ function PreviewBlock({
       </div>
     );
   }
+  // For file mutations we deliberately do NOT preview content here —
+  // streamed write/edit content thrashes the UI and the AI diff tab is the
+  // authoritative place to review the change. Show just the path + a
+  // one-line size hint so the user knows what's being touched.
   if (toolName === "write_file") {
     const content = typeof input.content === "string" ? input.content : "";
-    const preview =
-      content.length > 600
-        ? `${content.slice(0, 600)}\n…(${content.length - 600} more chars)`
-        : content;
+    const lines = content ? content.split("\n").length : 0;
     return (
-      <div className="space-y-1.5">
-        <div className="font-mono text-[10.5px] text-muted-foreground">
-          {String(input.path ?? "")}
+      <div className="space-y-0.5 font-mono text-[11px]">
+        <div className="text-muted-foreground">{String(input.path ?? "")}</div>
+        <div className="text-[10.5px] text-muted-foreground/80">
+          {lines} line{lines === 1 ? "" : "s"} · review in the diff tab
         </div>
-        <pre className="max-h-40 overflow-auto rounded-md bg-muted/60 p-2 font-mono text-[11px] leading-relaxed">
-          {preview}
-        </pre>
       </div>
     );
   }
   if (toolName === "edit") {
     const oldStr = typeof input.old_string === "string" ? input.old_string : "";
     const newStr = typeof input.new_string === "string" ? input.new_string : "";
+    const removed = oldStr ? oldStr.split("\n").length : 0;
+    const added = newStr ? newStr.split("\n").length : 0;
     return (
-      <div className="space-y-1.5">
-        <div className="font-mono text-[10.5px] text-muted-foreground">
+      <div className="space-y-0.5 font-mono text-[11px]">
+        <div className="text-muted-foreground">
           {String(input.path ?? "")}
           {input.replace_all ? " · replace all" : ""}
         </div>
-        <UnifiedDiff oldStr={oldStr} newStr={newStr} />
+        <div className="text-[10.5px] text-muted-foreground/80">
+          −{removed} / +{added} line{added === 1 && removed === 1 ? "" : "s"} ·
+          review in the diff tab
+        </div>
       </div>
     );
   }
@@ -142,24 +158,11 @@ function PreviewBlock({
       ? (input.edits as Array<{ old_string?: string; new_string?: string }>)
       : [];
     return (
-      <div className="space-y-1.5">
-        <div className="font-mono text-[10.5px] text-muted-foreground">
-          {String(input.path ?? "")} · {edits.length} edit
-          {edits.length === 1 ? "" : "s"}
-        </div>
-        <div className="space-y-1.5">
-          {edits.slice(0, 3).map((e, idx) => (
-            <UnifiedDiff
-              key={idx}
-              oldStr={e.old_string ?? ""}
-              newStr={e.new_string ?? ""}
-            />
-          ))}
-          {edits.length > 3 ? (
-            <div className="text-[10px] italic text-muted-foreground">
-              + {edits.length - 3} more
-            </div>
-          ) : null}
+      <div className="space-y-0.5 font-mono text-[11px]">
+        <div className="text-muted-foreground">{String(input.path ?? "")}</div>
+        <div className="text-[10.5px] text-muted-foreground/80">
+          {edits.length} edit{edits.length === 1 ? "" : "s"} · review in the
+          diff tab
         </div>
       </div>
     );
@@ -178,59 +181,3 @@ function PreviewBlock({
   );
 }
 
-function UnifiedDiff({ oldStr, newStr }: { oldStr: string; newStr: string }) {
-  const removed = oldStr.split("\n");
-  const added = newStr.split("\n");
-  // Strip a trailing empty line caused by terminal "\n"
-  if (removed.length > 1 && removed[removed.length - 1] === "") removed.pop();
-  if (added.length > 1 && added[added.length - 1] === "") added.pop();
-
-  const MAX = 40;
-  const removedShown = removed.slice(0, MAX);
-  const addedShown = added.slice(0, MAX);
-  const removedRest = removed.length - removedShown.length;
-  const addedRest = added.length - addedShown.length;
-
-  return (
-    <div className="overflow-hidden rounded-md border border-border/50 bg-muted/20 font-mono text-[11px] leading-relaxed">
-      <div className="max-h-64 overflow-auto">
-        {removedShown.map((line, i) => (
-          <DiffLine key={`r-${i}`} kind="del" line={line} />
-        ))}
-        {removedRest > 0 ? (
-          <DiffLine kind="meta" line={`… ${removedRest} more removed`} />
-        ) : null}
-        {addedShown.map((line, i) => (
-          <DiffLine key={`a-${i}`} kind="add" line={line} />
-        ))}
-        {addedRest > 0 ? (
-          <DiffLine kind="meta" line={`… ${addedRest} more added`} />
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
-function DiffLine({
-  kind,
-  line,
-}: {
-  kind: "add" | "del" | "meta";
-  line: string;
-}) {
-  const sigil = kind === "add" ? "+" : kind === "del" ? "-" : " ";
-  const cls =
-    kind === "add"
-      ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
-      : kind === "del"
-        ? "bg-destructive/10 text-destructive"
-        : "text-muted-foreground italic";
-  return (
-    <div className={cn("flex whitespace-pre", cls)}>
-      <span className="w-4 shrink-0 select-none px-1 text-center opacity-70">
-        {sigil}
-      </span>
-      <span className="min-w-0 flex-1 overflow-x-auto pr-2">{line || " "}</span>
-    </div>
-  );
-}

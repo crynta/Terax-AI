@@ -18,18 +18,24 @@ const store = new LazyStore(STORE_PATH, { defaults: {}, autoSave: 200 });
 export type LoadedSessions = {
   sessions: SessionMeta[];
   activeId: string | null;
-  messagesById: Record<string, UIMessage[]>;
 };
 
 export async function loadAll(): Promise<LoadedSessions> {
-  const sessions = (await store.get<SessionMeta[]>(KEY_SESSIONS)) ?? [];
-  const activeId = (await store.get<string | null>(KEY_ACTIVE)) ?? null;
-  const messagesById: Record<string, UIMessage[]> = {};
-  for (const s of sessions) {
-    const m = await store.get<UIMessage[]>(messagesKey(s.id));
-    if (m) messagesById[s.id] = m;
+  // One IPC roundtrip via entries() rather than two parallel get()s. Per-
+  // session messages are loaded lazily via `loadMessages` only when a
+  // session is opened, so cold boot stays at a single store call.
+  const entries = await store.entries();
+  let sessions: SessionMeta[] | undefined;
+  let activeId: string | null | undefined;
+  for (const [k, v] of entries) {
+    if (k === KEY_SESSIONS) sessions = v as SessionMeta[];
+    else if (k === KEY_ACTIVE) activeId = v as string | null;
   }
-  return { sessions, activeId, messagesById };
+  return { sessions: sessions ?? [], activeId: activeId ?? null };
+}
+
+export async function loadMessages(id: string): Promise<UIMessage[] | null> {
+  return (await store.get<UIMessage[]>(messagesKey(id))) ?? null;
 }
 
 export async function saveSessionsList(sessions: SessionMeta[]): Promise<void> {

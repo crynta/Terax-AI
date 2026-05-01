@@ -8,7 +8,6 @@ import {
 } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 import { cjk } from "@streamdown/cjk";
-import { code } from "@streamdown/code";
 import { math } from "@streamdown/math";
 import { mermaid } from "@streamdown/mermaid";
 import { ArrowDown01Icon } from "@hugeicons/core-free-icons";
@@ -208,7 +207,7 @@ export type ReasoningContentProps = ComponentProps<
   children: string;
 };
 
-const streamdownPlugins = { cjk, code, math, mermaid };
+const streamdownPlugins = { cjk, math, mermaid };
 const streamdownComponents = { code: MarkdownCode };
 
 export const ReasoningContent = memo(

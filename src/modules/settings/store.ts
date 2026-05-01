@@ -80,49 +80,37 @@ export const DEFAULT_PREFERENCES: Preferences = {
 const store = new LazyStore(STORE_PATH, { defaults: {}, autoSave: 200 });
 
 export async function loadPreferences(): Promise<Preferences> {
-  const [
-    theme,
-    defaultModelId,
-    editorTheme,
-    customInstructions,
-    autostart,
-    restoreWindowState,
-    autocompleteEnabled,
-    autocompleteProvider,
-    autocompleteModelId,
-    lmstudioBaseURL,
-    vimMode,
-  ] = await Promise.all([
-    store.get<ThemePref>(KEY_THEME),
-    store.get<ModelId>(KEY_DEFAULT_MODEL),
-    store.get<EditorThemeId>(KEY_EDITOR_THEME),
-    store.get<string>(KEY_CUSTOM_INSTRUCTIONS),
-    store.get<boolean>(KEY_AUTOSTART),
-    store.get<boolean>(KEY_RESTORE_WINDOW),
-    store.get<boolean>(KEY_AUTOCOMPLETE_ENABLED),
-    store.get<AutocompleteProviderId>(KEY_AUTOCOMPLETE_PROVIDER),
-    store.get<string>(KEY_AUTOCOMPLETE_MODEL),
-    store.get<string>(KEY_LMSTUDIO_BASE_URL),
-    store.get<boolean>(KEY_VIM_MODE),
-  ]);
+  // Single IPC roundtrip — fetching keys individually fans out to one
+  // `plugin:store|get` per setting and is the dominant boot cost.
+  const entries = await store.entries();
+  const map = new Map<string, unknown>(entries);
+  const get = <T>(k: string): T | undefined => map.get(k) as T | undefined;
   return {
-    theme: theme ?? DEFAULT_PREFERENCES.theme,
-    defaultModelId: defaultModelId ?? DEFAULT_PREFERENCES.defaultModelId,
-    editorTheme: editorTheme ?? DEFAULT_PREFERENCES.editorTheme,
+    theme: get<ThemePref>(KEY_THEME) ?? DEFAULT_PREFERENCES.theme,
+    defaultModelId:
+      get<ModelId>(KEY_DEFAULT_MODEL) ?? DEFAULT_PREFERENCES.defaultModelId,
+    editorTheme:
+      get<EditorThemeId>(KEY_EDITOR_THEME) ?? DEFAULT_PREFERENCES.editorTheme,
     customInstructions:
-      customInstructions ?? DEFAULT_PREFERENCES.customInstructions,
-    autostart: autostart ?? DEFAULT_PREFERENCES.autostart,
+      get<string>(KEY_CUSTOM_INSTRUCTIONS) ??
+      DEFAULT_PREFERENCES.customInstructions,
+    autostart: get<boolean>(KEY_AUTOSTART) ?? DEFAULT_PREFERENCES.autostart,
     restoreWindowState:
-      restoreWindowState ?? DEFAULT_PREFERENCES.restoreWindowState,
+      get<boolean>(KEY_RESTORE_WINDOW) ??
+      DEFAULT_PREFERENCES.restoreWindowState,
     autocompleteEnabled:
-      autocompleteEnabled ?? DEFAULT_PREFERENCES.autocompleteEnabled,
+      get<boolean>(KEY_AUTOCOMPLETE_ENABLED) ??
+      DEFAULT_PREFERENCES.autocompleteEnabled,
     autocompleteProvider:
-      autocompleteProvider ?? DEFAULT_PREFERENCES.autocompleteProvider,
+      get<AutocompleteProviderId>(KEY_AUTOCOMPLETE_PROVIDER) ??
+      DEFAULT_PREFERENCES.autocompleteProvider,
     autocompleteModelId:
-      autocompleteModelId ?? DEFAULT_PREFERENCES.autocompleteModelId,
+      get<string>(KEY_AUTOCOMPLETE_MODEL) ??
+      DEFAULT_PREFERENCES.autocompleteModelId,
     lmstudioBaseURL:
-      lmstudioBaseURL ?? DEFAULT_PREFERENCES.lmstudioBaseURL,
-    vimMode: vimMode ?? DEFAULT_PREFERENCES.vimMode,
+      get<string>(KEY_LMSTUDIO_BASE_URL) ??
+      DEFAULT_PREFERENCES.lmstudioBaseURL,
+    vimMode: get<boolean>(KEY_VIM_MODE) ?? DEFAULT_PREFERENCES.vimMode,
   };
 }
 

@@ -91,9 +91,15 @@ export type LoadedAgents = {
 };
 
 export async function loadAgents(): Promise<LoadedAgents> {
-  const custom = (await store.get<Agent[]>(KEY_CUSTOM)) ?? [];
-  const activeId = (await store.get<string>(KEY_ACTIVE)) ?? BUILTIN_AGENTS[0].id;
-  return { custom, activeId };
+  // One IPC roundtrip via entries() instead of two sequential get()s.
+  const entries = await store.entries();
+  let custom: Agent[] | undefined;
+  let activeId: string | undefined;
+  for (const [k, v] of entries) {
+    if (k === KEY_CUSTOM) custom = v as Agent[];
+    else if (k === KEY_ACTIVE) activeId = v as string;
+  }
+  return { custom: custom ?? [], activeId: activeId ?? BUILTIN_AGENTS[0].id };
 }
 
 export async function saveCustomAgents(custom: Agent[]): Promise<void> {

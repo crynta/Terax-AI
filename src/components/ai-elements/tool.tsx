@@ -25,7 +25,7 @@ import {
 import { HugeiconsIcon } from "@hugeicons/react";
 import type { DynamicToolUIPart, ToolUIPart } from "ai";
 import type { ComponentProps, ReactNode } from "react";
-import { isValidElement, useState } from "react";
+import { isValidElement, memo, useState } from "react";
 
 import type { BundledLanguage } from "shiki";
 import { CodeBlockContent } from "./code-block";
@@ -56,7 +56,7 @@ const STATUS_DOT: Record<ToolPart["state"], string> = {
   "approval-requested": "bg-amber-500",
   "approval-responded": "bg-sky-500",
   "input-streaming": "bg-muted-foreground/40",
-  "input-available": "bg-amber-500 animate-pulse",
+  "input-available": "bg-amber-500",
   "output-available": "bg-transparent border border-muted-foreground/40",
   "output-denied": "bg-orange-500",
   "output-error": "bg-destructive",
@@ -121,7 +121,20 @@ export type ToolProps = ComponentProps<typeof Collapsible> & {
   errorText?: string;
 };
 
-export const Tool = ({
+// Tools whose `input` carries large/streaming content (file bodies, sub-
+// agent prompts, todo lists). The AI diff tab is the canonical place to
+// view file changes; for the rest, the header summary + final output is
+// enough. Re-rendering streamed input on every token both stalls the UI
+// and duplicates information.
+const HEAVY_CONTENT_TOOLS = new Set([
+  "write_file",
+  "edit",
+  "multi_edit",
+  "run_subagent",
+  "todo_write",
+]);
+
+const ToolImpl = ({
   className,
   toolName,
   state,
@@ -137,8 +150,13 @@ export const Tool = ({
   const summary = deriveSummary(toolName, input);
   const isError = state === "output-error";
   const open = defaultOpen ?? isError;
+  const isHeavy = HEAVY_CONTENT_TOOLS.has(toolName);
+  // For heavy tools, only show details on error — never the streamed input
+  // body, which is huge and re-renders per token.
+  const showInputBody = !isHeavy && Boolean(input);
+  const showOutputBody = !isHeavy && output !== undefined;
   const hasDetails =
-    Boolean(input) || output !== undefined || Boolean(errorText);
+    showInputBody || showOutputBody || Boolean(errorText);
 
   return (
     <Collapsible
@@ -189,18 +207,37 @@ export const Tool = ({
           )}
         >
           <div className="ml-3 mt-1 space-y-2 border-l border-border/60 pl-3 pb-1">
-            {input ? <ToolInput toolName={toolName} input={input} /> : null}
-            <ToolOutput
-              toolName={toolName}
-              output={output}
-              errorText={errorText}
-            />
+            {showInputBody ? (
+              <ToolInput toolName={toolName} input={input} />
+            ) : null}
+            {showOutputBody || errorText ? (
+              <ToolOutput
+                toolName={toolName}
+                output={showOutputBody ? output : undefined}
+                errorText={errorText}
+              />
+            ) : null}
           </div>
         </CollapsibleContent>
       )}
     </Collapsible>
   );
 };
+
+// For heavy tools, the only thing that should trigger a re-render is a
+// state transition or the path summary changing — NOT every input-content
+// token. We compare the cheap derived summary instead of the input ref.
+export const Tool = memo(ToolImpl, (a, b) => {
+  if (a.toolName !== b.toolName || a.state !== b.state) return false;
+  if (a.errorText !== b.errorText) return false;
+  if (a.output !== b.output) return false;
+  if (a.className !== b.className) return false;
+  if (HEAVY_CONTENT_TOOLS.has(a.toolName)) {
+    return deriveSummary(a.toolName, a.input) ===
+      deriveSummary(b.toolName, b.input);
+  }
+  return a.input === b.input;
+});
 
 function ToolInput({ toolName, input }: { toolName: string; input: unknown }) {
   if (input == null) return null;
@@ -325,49 +362,26 @@ function ToolOutput({
   );
 }
 
-const EXT_LANG: Record<string, BundledLanguage> = {
-  ts: "ts" as BundledLanguage,
-  tsx: "tsx" as BundledLanguage,
-  js: "js" as BundledLanguage,
-  jsx: "jsx" as BundledLanguage,
-  json: "json" as BundledLanguage,
-  md: "md" as BundledLanguage,
-  rs: "rs" as BundledLanguage,
-  py: "py" as BundledLanguage,
-  sh: "bash" as BundledLanguage,
-  bash: "bash" as BundledLanguage,
-  zsh: "bash" as BundledLanguage,
-  css: "css" as BundledLanguage,
-  html: "html" as BundledLanguage,
-  yaml: "yaml" as BundledLanguage,
-  yml: "yaml" as BundledLanguage,
-  toml: "toml" as BundledLanguage,
-  go: "go" as BundledLanguage,
-};
-
-function langFromPath(path: string): BundledLanguage {
-  const m = path.match(/\.([a-z0-9]+)$/i);
-  if (!m) return "text" as BundledLanguage;
-  return EXT_LANG[m[1].toLowerCase()] ?? ("text" as BundledLanguage);
-}
-
 function renderToolOutput(toolName: string, output: unknown): ReactNode | null {
   if (!output || typeof output !== "object") return null;
   const o = output as Record<string, unknown>;
 
   if (toolName === "read_file") {
     const path = typeof o.path === "string" ? o.path : "";
-    const content = typeof o.content === "string" ? o.content : "";
     const size = typeof o.size === "number" ? o.size : null;
+    const content = typeof o.content === "string" ? o.content : "";
+    const lines = content ? content.split("\n").length : null;
     return (
-      <div className="space-y-1">
-        <div className="flex items-center justify-between gap-2 text-[10px]">
-          <span className="font-mono text-muted-foreground">{path}</span>
-          {size != null ? (
-            <span className="text-muted-foreground">{formatBytes(size)}</span>
-          ) : null}
-        </div>
-        <CodeBlockMini code={content} language={langFromPath(path)} />
+      <div className="flex items-center gap-1.5 font-mono text-[11px]">
+        <span className="text-emerald-600 dark:text-emerald-400">✓</span>
+        <span className="text-foreground">read</span>
+        {path ? <span className="text-muted-foreground">· {path}</span> : null}
+        {lines != null ? (
+          <span className="text-muted-foreground">
+            ({lines} line{lines === 1 ? "" : "s"}
+            {size != null ? `, ${formatBytes(size)}` : ""})
+          </span>
+        ) : null}
       </div>
     );
   }

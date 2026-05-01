@@ -20,6 +20,7 @@ import {
   deleteSessionData,
   deriveTitle,
   loadAll,
+  loadMessages,
   newSessionId,
   saveActiveId,
   saveMessages,
@@ -145,6 +146,32 @@ const chats = new Map<string, Chat<UIMessage>>();
 // Initial messages for a session, populated at hydration time and consumed
 // when the matching Chat is constructed.
 const seedMessages = new Map<string, UIMessage[]>();
+
+// Trailing debounce for per-token message persistence. Streaming fires
+// `persistMessages` on every token; without this we'd JSON-serialize the
+// full message array and round-trip to the store plugin per token, which
+// stalls the UI. Flush on idle (status transition) via `flushPersist`.
+const PERSIST_DEBOUNCE_MS = 300;
+const pendingPersist = new Map<
+  string,
+  { latest: UIMessage[]; timer: ReturnType<typeof setTimeout> }
+>();
+
+function flushPersistEntry(id: string) {
+  const entry = pendingPersist.get(id);
+  if (!entry) return;
+  clearTimeout(entry.timer);
+  pendingPersist.delete(id);
+  void saveMessages(id, entry.latest);
+}
+
+export function flushPersist(id?: string): void {
+  if (id) {
+    flushPersistEntry(id);
+    return;
+  }
+  for (const key of Array.from(pendingPersist.keys())) flushPersistEntry(key);
+}
 
 function makeChat(sessionId: string): Chat<UIMessage> {
   // Per-session read cache: paths the model has called `read_file` on.
@@ -280,33 +307,33 @@ export const useChatStore = create<StoreState>((set, get) => ({
 
   hydrateSessions: async () => {
     if (get().sessionsHydrated) return;
-    const { sessions, activeId, messagesById } = await loadAll();
-    for (const [id, m] of Object.entries(messagesById)) {
-      seedMessages.set(id, m);
-    }
+    const { sessions } = await loadAll();
 
-    let nextSessions = sessions;
-    let nextActive = activeId;
-    if (nextSessions.length === 0) {
-      const id = newSessionId();
-      const meta: SessionMeta = {
-        id,
+    // Reuse the most recent untitled "New chat" session if one exists from
+    // the previous run — no point stacking empty placeholder sessions every
+    // launch. Otherwise prepend a fresh one.
+    const reusable = sessions[0]?.title === "New chat" ? sessions[0] : null;
+    let nextSessions: SessionMeta[];
+    let freshId: string;
+    if (reusable) {
+      nextSessions = sessions;
+      freshId = reusable.id;
+    } else {
+      freshId = newSessionId();
+      const fresh: SessionMeta = {
+        id: freshId,
         title: "New chat",
         createdAt: Date.now(),
         updatedAt: Date.now(),
       };
-      nextSessions = [meta];
-      nextActive = id;
+      nextSessions = [fresh, ...sessions];
       void saveSessionsList(nextSessions);
-      void saveActiveId(nextActive);
-    } else if (!nextActive || !nextSessions.some((s) => s.id === nextActive)) {
-      nextActive = nextSessions[0].id;
-      void saveActiveId(nextActive);
     }
+    void saveActiveId(freshId);
 
     set({
       sessions: nextSessions,
-      activeSessionId: nextActive,
+      activeSessionId: freshId,
       sessionsHydrated: true,
     });
   },
@@ -329,8 +356,21 @@ export const useChatStore = create<StoreState>((set, get) => ({
   switchSession: (id) => {
     if (get().activeSessionId === id) return;
     if (!get().sessions.some((s) => s.id === id)) return;
-    set({ activeSessionId: id, agentMeta: IDLE_META });
-    void saveActiveId(id);
+
+    // Lazily seed the chat with persisted messages the first time we open
+    // this session. Subsequent switches reuse the cached Chat instance.
+    const flip = () => {
+      set({ activeSessionId: id, agentMeta: IDLE_META });
+      void saveActiveId(id);
+    };
+    if (chats.has(id) || seedMessages.has(id)) {
+      flip();
+      return;
+    }
+    void loadMessages(id).then((m) => {
+      if (m && m.length > 0 && !chats.has(id)) seedMessages.set(id, m);
+      flip();
+    });
   },
 
   deleteSession: (id) => {
@@ -338,6 +378,11 @@ export const useChatStore = create<StoreState>((set, get) => ({
     chats.get(id)?.stop();
     chats.delete(id);
     seedMessages.delete(id);
+    const pend = pendingPersist.get(id);
+    if (pend) {
+      clearTimeout(pend.timer);
+      pendingPersist.delete(id);
+    }
     void deleteSessionData(id);
     void useTodosStore.getState().clearSession(id);
 
@@ -370,13 +415,27 @@ export const useChatStore = create<StoreState>((set, get) => ({
   },
 
   persistMessages: (id, messages) => {
-    void saveMessages(id, messages);
+    // Debounce the message-blob write so streaming doesn't pound the store.
+    const existing = pendingPersist.get(id);
+    if (existing) clearTimeout(existing.timer);
+    const timer = setTimeout(() => {
+      const entry = pendingPersist.get(id);
+      if (!entry) return;
+      pendingPersist.delete(id);
+      void saveMessages(id, entry.latest);
+    }, PERSIST_DEBOUNCE_MS);
+    pendingPersist.set(id, { latest: messages, timer });
+
+    // Update zustand session list only when the derived title actually
+    // changes — otherwise we'd rewrite the sessions array (and trigger
+    // re-renders + a store write) on every token.
     const sessions = get().sessions;
     const meta = sessions.find((s) => s.id === id);
     if (!meta) return;
     const isUntitled = !meta.title || meta.title === "New chat";
-    const nextTitle = isUntitled ? deriveTitle(messages) : meta.title;
-    if (nextTitle === meta.title && messages.length === 0) return;
+    if (!isUntitled) return;
+    const nextTitle = deriveTitle(messages);
+    if (nextTitle === meta.title) return;
     const next = sessions.map((s) =>
       s.id === id ? { ...s, title: nextTitle, updatedAt: Date.now() } : s,
     );

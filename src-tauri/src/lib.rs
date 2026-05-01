@@ -33,6 +33,23 @@ async fn open_settings_window(app: tauri::AppHandle, tab: Option<String>) -> Res
     Ok(())
 }
 
+/// Batch-read multiple keyring entries in a single IPC call. The plugin's
+/// per-key `get_password` command costs one round-trip each; on cold boot
+/// we fan that out across every provider we know about, even unconfigured
+/// ones — which shows up as a wave of `plugin:keyring|get_password` rows.
+/// This collapses the wave into one command.
+#[tauri::command]
+async fn keyring_get_all(service: String, accounts: Vec<String>) -> Vec<Option<String>> {
+    accounts
+        .into_iter()
+        .map(|a| {
+            keyring::Entry::new(&service, &a)
+                .ok()
+                .and_then(|e| e.get_password().ok())
+        })
+        .collect()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -75,6 +92,7 @@ pub fn run() {
             shell::shell_bg_kill,
             shell::shell_bg_list,
             open_settings_window,
+            keyring_get_all,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
