@@ -1,6 +1,6 @@
-# CLAUDE.md
+# TERAX.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Terax supports TERAX.md file at the workspace root (similiar to AGENTS.md, CLAUDE.md, etc.) 
 
 ## Project
 

@@ -1,6 +1,6 @@
 [package]
 name = "terax"
-version = "0.1.3"
+version = "0.2.6"
 description = "Terax — an open-source AI-native terminal emulator"
 authors = ["crynta"]
 edition = "2021"
