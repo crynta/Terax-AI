@@ -24,7 +24,7 @@ export function ShortcutsDialog({ open, onOpenChange }: Props) {
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex flex-col gap-5">
+        <div className="flex max-h-[70vh] flex-col gap-5 overflow-y-auto pr-2">
           {SHORTCUT_GROUPS.map((group) => {
             const items = SHORTCUTS.filter((s) => s.group === group);
             if (items.length === 0) return null;
