@@ -506,6 +506,7 @@ export type RunAgentOptions = {
   ollamaBaseURL?: string;
   zhipuBaseURL?: string;
   remoteModelOverride?: string | null;
+  openaiCompatibleContextWindow?: number;
   planMode?: boolean;
   projectMemory?: string | null;
   uiMessages: UIMessage[];
@@ -535,9 +536,12 @@ export async function runAgentStream(opts: RunAgentOptions) {
   );
 
   const history = await convertToModelMessages(opts.uiMessages);
+  const contextLimit = modelId === "openai-compatible-custom" && opts.openaiCompatibleContextWindow
+    ? opts.openaiCompatibleContextWindow
+    : getModelContextLimit(getModel(modelId).id);
   const compact = compactModelMessagesDetailed(
     history,
-    getModelContextLimit(getModel(modelId).id),
+    contextLimit,
   );
   const compactedHistory = compact.messages;
   if (compact.compacted) {
