@@ -70,7 +70,7 @@ export const ExplorerSearch = forwardRef<ExplorerSearchHandle, Props>(function E
 }: Props,
   ref,
 ) {
-  const showHidden = usePreferencesStore((s) => s.showHidden);
+  const showHidden = usePreferencesStore((s) => s.hiddenFiles !== "hidden");
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchHit[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);

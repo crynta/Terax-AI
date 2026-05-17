@@ -40,7 +40,8 @@ type Options = {
 };
 
 export function useFileTree(rootPath: string | null, options?: Options) {
-  const showHidden = usePreferencesStore((s) => s.showHidden);
+  const hiddenFiles = usePreferencesStore((s) => s.hiddenFiles);
+  const showHidden = hiddenFiles !== "hidden";
   const showHiddenRef = useRef(showHidden);
   const [nodes, setNodes] = useState<TreeState>({});
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -237,6 +238,7 @@ export function useFileTree(rootPath: string | null, options?: Options) {
 
   return {
     nodes,
+    hiddenFiles,
     expanded,
     pendingCreate,
     renaming,

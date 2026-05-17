@@ -18,12 +18,13 @@ import type { ThemePref } from "@/modules/settings/store";
 import {
   EDITOR_THEME_LABELS,
   EDITOR_THEMES,
+  HIDDEN_FILES_MODES,
   TERMINAL_FONT_SIZES,
   TERMINAL_SCROLLBACK_PRESETS,
   setAutostart,
   setEditorTheme,
+  setHiddenFiles,
   setRestoreWindowState,
-  setShowHidden,
   setTerminalFontSize,
   setTerminalScrollback,
   setTerminalWebglEnabled,
@@ -59,7 +60,7 @@ export function GeneralSection() {
   const autostart = usePreferencesStore((s) => s.autostart);
   const restoreWindowState = usePreferencesStore((s) => s.restoreWindowState);
   const vimMode = usePreferencesStore((s) => s.vimMode);
-  const showHidden = usePreferencesStore((s) => s.showHidden);
+  const hiddenFiles = usePreferencesStore((s) => s.hiddenFiles);
   const terminalWebglEnabled = usePreferencesStore(
     (s) => s.terminalWebglEnabled,
   );
@@ -179,15 +180,30 @@ export function GeneralSection() {
 
       <div className="flex flex-col gap-2">
         <Label>Explorer</Label>
-        <SettingRow
-          title="Show hidden files"
-          description="Include dot-prefixed files and folders (.env, .gitignore, .config) in the file explorer and search."
-        >
-          <Switch
-            checked={showHidden}
-            onCheckedChange={(v) => void setShowHidden(v)}
-          />
-        </SettingRow>
+        <div className="flex flex-col gap-1.5 rounded-lg border border-border/60 bg-card/60 px-3 py-2.5">
+          <span className="text-[12.5px] font-medium">Hidden files</span>
+          <span className="text-[10.5px] leading-relaxed text-muted-foreground">
+            How dot-prefixed files and folders (.env, .gitignore, .config)
+            appear in the file explorer and search.
+          </span>
+          <div className="mt-1 grid grid-cols-3 gap-2">
+            {HIDDEN_FILES_MODES.map((m) => (
+              <button
+                key={m.id}
+                type="button"
+                onClick={() => void setHiddenFiles(m.id)}
+                className={cn(
+                  "rounded-md border px-2 py-1.5 text-[11.5px] transition-all",
+                  hiddenFiles === m.id
+                    ? "border-foreground/60 ring-1 ring-foreground/20"
+                    : "border-border/60 hover:border-border",
+                )}
+              >
+                {m.label}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
       <div className="flex flex-col gap-2">

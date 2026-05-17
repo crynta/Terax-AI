@@ -179,7 +179,7 @@ function CurrentSegmentDropdown({
   path: string;
   onCd: (p: string) => void;
 }) {
-  const showHidden = usePreferencesStore((s) => s.showHidden);
+  const showHidden = usePreferencesStore((s) => s.hiddenFiles !== "hidden");
   const [open, setOpen] = useState(false);
   const [children, setChildren] = useState<string[] | null>(null);
   const [error, setError] = useState<string | null>(null);

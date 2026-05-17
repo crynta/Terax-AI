@@ -12,6 +12,15 @@ import { LazyStore } from "@tauri-apps/plugin-store";
 
 export type ThemePref = "system" | "light" | "dark";
 
+export type HiddenFilesMode = "hidden" | "inline" | "grouped";
+
+/** Ordered option list for the explorer "Hidden files" setting control. */
+export const HIDDEN_FILES_MODES: { id: HiddenFilesMode; label: string }[] = [
+  { id: "hidden", label: "Hidden" },
+  { id: "inline", label: "Shown inline" },
+  { id: "grouped", label: "Grouped" },
+];
+
 export const EDITOR_THEMES = [
   "atomone",
   "aura",
@@ -55,7 +64,7 @@ export type Preferences = {
   favoriteModelIds: string[];
   recentModelIds: string[];
   vimMode: boolean;
-  showHidden: boolean;
+  hiddenFiles: HiddenFilesMode;
   terminalWebglEnabled: boolean;
   terminalFontSize: number;
   terminalScrollback: number;
@@ -81,6 +90,7 @@ const KEY_OPENAI_COMPAT_MODEL_ID = "openaiCompatibleModelId";
 const KEY_FAVORITE_MODELS = "favoriteModelIds";
 const KEY_RECENT_MODELS = "recentModelIds";
 const KEY_VIM_MODE = "vimMode";
+const KEY_HIDDEN_FILES = "hiddenFiles";
 const KEY_SHOW_HIDDEN = "showHidden";
 const LEGACY_KEY_SHOW_HIDDEN_DIRS = "showHiddenDirectories";
 const KEY_TERMINAL_WEBGL_ENABLED = "terminalWebglEnabled";
@@ -122,7 +132,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   favoriteModelIds: [],
   recentModelIds: [],
   vimMode: false,
-  showHidden: false,
+  hiddenFiles: "hidden",
   terminalWebglEnabled: true,
   terminalFontSize: TERMINAL_FONT_SIZE_DEFAULT,
   terminalScrollback: TERMINAL_SCROLLBACK_DEFAULT,
@@ -189,10 +199,23 @@ export async function loadPreferences(): Promise<Preferences> {
     recentModelIds:
       get<string[]>(KEY_RECENT_MODELS) ?? DEFAULT_PREFERENCES.recentModelIds,
     vimMode: get<boolean>(KEY_VIM_MODE) ?? DEFAULT_PREFERENCES.vimMode,
-    showHidden:
-      get<boolean>(KEY_SHOW_HIDDEN) ??
-      get<boolean>(LEGACY_KEY_SHOW_HIDDEN_DIRS) ??
-      DEFAULT_PREFERENCES.showHidden,
+    hiddenFiles: ((): HiddenFilesMode => {
+      const explicit = get<HiddenFilesMode>(KEY_HIDDEN_FILES);
+      if (
+        explicit === "hidden" ||
+        explicit === "inline" ||
+        explicit === "grouped"
+      ) {
+        return explicit;
+      }
+      // Migrate from the legacy boolean toggle: true -> inline, false -> hidden.
+      const legacy =
+        get<boolean>(KEY_SHOW_HIDDEN) ??
+        get<boolean>(LEGACY_KEY_SHOW_HIDDEN_DIRS);
+      if (legacy === true) return "inline";
+      if (legacy === false) return "hidden";
+      return DEFAULT_PREFERENCES.hiddenFiles;
+    })(),
     terminalWebglEnabled:
       get<boolean>(KEY_TERMINAL_WEBGL_ENABLED) ??
       DEFAULT_PREFERENCES.terminalWebglEnabled,
@@ -279,8 +302,8 @@ export async function setVimMode(value: boolean): Promise<void> {
   await writePref(KEY_VIM_MODE, value);
 }
 
-export async function setShowHidden(value: boolean): Promise<void> {
-  await writePref(KEY_SHOW_HIDDEN, value);
+export async function setHiddenFiles(value: HiddenFilesMode): Promise<void> {
+  await writePref(KEY_HIDDEN_FILES, value);
 }
 
 export async function setTerminalWebglEnabled(value: boolean): Promise<void> {
@@ -352,7 +375,7 @@ export async function onPreferencesChange(
     [KEY_FAVORITE_MODELS]: "favoriteModelIds",
     [KEY_RECENT_MODELS]: "recentModelIds",
     [KEY_VIM_MODE]: "vimMode",
-    [KEY_SHOW_HIDDEN]: "showHidden",
+    [KEY_HIDDEN_FILES]: "hiddenFiles",
     [KEY_TERMINAL_WEBGL_ENABLED]: "terminalWebglEnabled",
     [KEY_TERMINAL_FONT_SIZE]: "terminalFontSize",
     [KEY_TERMINAL_SCROLLBACK]: "terminalScrollback",
