@@ -8,15 +8,21 @@ import "./styles/globals.css";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import ReactDOM from "react-dom/client";
 import App from "./app/App";
+import { ensureAndroidBootstrapped } from "./lib/androidBootstrap";
 import { USE_CUSTOM_WINDOW_CONTROLS } from "./lib/platform";
 
 if (USE_CUSTOM_WINDOW_CONTROLS) {
   document.documentElement.dataset.chrome = "borderless";
 }
 
-ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
-  <App />,
-);
+// On Android the rootfs + proot binary need to be unpacked from the APK
+// before any PTY can spawn. Block React mount on this — on desktop this
+// resolves synchronously so the user sees no extra latency.
+void ensureAndroidBootstrapped().then(() => {
+  ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
+    <App />,
+  );
+});
 
 // Window starts hidden (per tauri.conf.json) so users never see a transparent
 // shadow-only frame before React paints. Use setTimeout — rAF is throttled

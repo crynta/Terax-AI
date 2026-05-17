@@ -1,6 +1,9 @@
 // ── Android PTY (nix + proot) ─────────────────────────────────────────────────
+// `pub mod android` (not `mod android`) so the shell module can reach
+// `crate::modules::pty::android::{proot_bin, rootfs_dir}` to wrap one-shot
+// commands inside proot.
 #[cfg(target_os = "android")]
-mod android;
+pub mod android;
 #[cfg(target_os = "android")]
 pub use android::{pty_close, pty_open, pty_resize, pty_write, PtyState};
 

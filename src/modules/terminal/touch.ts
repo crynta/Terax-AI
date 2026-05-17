@@ -1,31 +1,41 @@
 // src/modules/terminal/touch.ts
 //
-// Adds soft-keyboard support to an xterm.js Terminal on Android.
-// Uses a hidden <input> to pull up the IME, then forwards typed
-// characters and special keys into the terminal.
+// Soft-keyboard support for xterm.js on touch devices (Android primarily).
 //
-// Usage:
-//   import { installTouchInput } from "./touch";
-//   // inside your terminal useEffect:
-//   const cleanup = installTouchInput(term, containerRef.current!);
-//   return () => cleanup();
+// xterm.js doesn't trigger the IME on its own — its DOM target is a
+// canvas/WebGL surface and Android won't pop the keyboard for canvas focus.
+// We sidestep that by parking a hidden <input> off-screen, focusing it when
+// the user taps the terminal, and translating its keydown / input events
+// into bytes we send to the PTY.
+//
+// This module is decoupled from the xterm Terminal instance — TerminalPane
+// hands us a `writeToPty(data)` callback so the helper survives the
+// renderer-pool detach/re-attach dance.
 
-import type { Terminal } from "@xterm/xterm";
+type WriteToPty = (data: string) => void;
 
 /**
  * Install touch input support on a terminal container.
- * Returns a cleanup function — call it when the terminal unmounts.
+ *
+ * Returns a cleanup function — call it when the pane unmounts. No-op on
+ * platforms that don't report touch points (i.e. desktop), so it's safe to
+ * call unconditionally.
  */
 export function installTouchInput(
-  terminal: Terminal,
-  container: HTMLElement
+  container: HTMLElement,
+  writeToPty: WriteToPty,
 ): () => void {
-  // Only activate on touch devices (Android, iOS)
-  if (!navigator.maxTouchPoints || navigator.maxTouchPoints === 0) {
+  // Only activate on touch devices. `maxTouchPoints` is 0 on every desktop
+  // browser; mobile Safari + Android Chrome both report ≥ 1.
+  if (
+    typeof navigator === "undefined" ||
+    !navigator.maxTouchPoints ||
+    navigator.maxTouchPoints === 0
+  ) {
     return () => {};
   }
 
-  // ── Hidden input that receives IME / keyboard input ──────────────────────
+  // ── Hidden input that receives IME / keyboard events ──────────────────────
   const hidden = document.createElement("input");
   hidden.setAttribute("autocorrect", "off");
   hidden.setAttribute("autocapitalize", "none");
@@ -53,6 +63,8 @@ export function installTouchInput(
   document.body.appendChild(hidden);
 
   // ── Tap the terminal → focus the hidden input → keyboard pops up ─────────
+  // Both click and touchend so we catch all gesture variants; .focus() must
+  // run inside a user gesture handler or Android will silently ignore it.
   const onContainerClick = () => {
     hidden.focus({ preventScroll: true });
   };
@@ -60,13 +72,13 @@ export function installTouchInput(
   container.addEventListener("touchend", onContainerClick, { passive: true });
 
   // ── Forward regular typed text ─────────────────────────────────────────────
+  // IME composition lands here as a single `input` event with the final text;
+  // we clear the field so the next keystroke fires another `input` cleanly.
   const onInput = (e: Event) => {
     const inputEl = e.target as HTMLInputElement;
     const text = inputEl.value;
     if (text) {
-      // terminal.paste() sends text as if it were typed — respects bracketed
-      // paste mode if enabled.
-      terminal.paste(text);
+      writeToPty(text);
       inputEl.value = "";
     }
   };
@@ -74,34 +86,34 @@ export function installTouchInput(
 
   // ── Forward special keys ───────────────────────────────────────────────────
   const KEY_MAP: Record<string, string> = {
-    Backspace:   "\x7f",
-    Delete:      "\x1b[3~",
-    Enter:       "\r",
-    Tab:         "\t",
-    Escape:      "\x1b",
-    ArrowUp:     "\x1b[A",
-    ArrowDown:   "\x1b[B",
-    ArrowRight:  "\x1b[C",
-    ArrowLeft:   "\x1b[D",
-    Home:        "\x1b[H",
-    End:         "\x1b[F",
-    PageUp:      "\x1b[5~",
-    PageDown:    "\x1b[6~",
+    Backspace:  "\x7f",
+    Delete:     "\x1b[3~",
+    Enter:      "\r",
+    Tab:        "\t",
+    Escape:     "\x1b",
+    ArrowUp:    "\x1b[A",
+    ArrowDown:  "\x1b[B",
+    ArrowRight: "\x1b[C",
+    ArrowLeft:  "\x1b[D",
+    Home:       "\x1b[H",
+    End:        "\x1b[F",
+    PageUp:     "\x1b[5~",
+    PageDown:   "\x1b[6~",
   };
 
   const onKeyDown = (e: KeyboardEvent) => {
     const seq = KEY_MAP[e.key];
     if (seq) {
       e.preventDefault();
-      terminal.paste(seq);
+      writeToPty(seq);
       return;
     }
-    // Ctrl+C, Ctrl+D, etc.
+    // Ctrl-letter shortcuts: Ctrl-C, Ctrl-D, Ctrl-L, etc. Map A-Z to 1-26.
     if (e.ctrlKey && e.key.length === 1) {
       const code = e.key.toUpperCase().charCodeAt(0) - 64;
       if (code > 0 && code < 32) {
         e.preventDefault();
-        terminal.paste(String.fromCharCode(code));
+        writeToPty(String.fromCharCode(code));
       }
     }
   };
@@ -118,4 +130,3 @@ export function installTouchInput(
     }
   };
 }
-

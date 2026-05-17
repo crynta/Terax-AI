@@ -1,10 +1,19 @@
+// Bootstrap is Android-only: it extracts the proot binary + Alpine rootfs from
+// app resources on first run. It also pulls in `std::os::unix::fs::PermissionsExt`,
+// which would fail to compile on Windows.
+#[cfg(target_os = "android")]
 mod bootstrap;
 mod modules;
 
 use modules::{fs, net, pty, secrets, shell, workspace};
-use tauri::{Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 
 // ── Settings window (desktop only — Android has no multi-window) ─────────────
+// `Emitter` / `Manager` / `WebviewUrl` / `WebviewWindowBuilder` are only used
+// by this function, so we import them inside the cfg block to avoid
+// unused-import warnings when compiling for Android.
+#[cfg(not(target_os = "android"))]
+use tauri::{Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
+
 #[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn open_settings_window(app: tauri::AppHandle, tab: Option<String>) -> Result<(), String> {
