@@ -5,6 +5,12 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 import { Kbd } from "@/components/ui/kbd";
 import { Spinner } from "@/components/ui/spinner";
 import { fmtShortcut, MOD_KEY } from "@/lib/platform";
@@ -49,12 +55,16 @@ import {
   StopCircleIcon,
   Tick01Icon,
   CloudServerIcon,
+  CopyIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { motion } from "motion/react";
 import { useMemo, useRef, useState } from "react";
 import {
+  customEndpointModelId,
+  customEndpointToModelInfo,
   getModel,
+  isCustomEndpointModelId,
   MODELS,
   providerNeedsKey,
   PROVIDERS,
@@ -68,6 +78,7 @@ import { ACCEPTED_FILES, useComposer } from "../lib/composer";
 import { toggleFavoriteModel } from "../lib/modelPrefs";
 import { useChatStore } from "../store/chatStore";
 import { usePreferencesStore } from "@/modules/settings/preferences";
+import type { CustomEndpoint } from "@/modules/settings/store";
 
 const PROVIDER_ICON = {
   openai: ChatGptIcon,
@@ -241,6 +252,7 @@ function ModelDropdown() {
   const remoteOverride = useChatStore((s) => s.remoteModelOverride);
   const favoriteIds = usePreferencesStore((s) => s.favoriteModelIds);
   const recentIds = usePreferencesStore((s) => s.recentModelIds);
+  const customEndpoints = usePreferencesStore((s) => s.customEndpoints);
   const current = getModel(selected);
   const [search, setSearch] = useState("");
   const [activeProvider, setActiveProvider] = useState<ProviderId | null>(null);
@@ -286,9 +298,14 @@ function ModelDropdown() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apiKeys]);
 
+  const allModels = useMemo(() => {
+    const custom: ModelInfo[] = (customEndpoints ?? []).map(customEndpointToModelInfo);
+    return [...MODELS, ...custom];
+  }, [customEndpoints]);
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    let pool: readonly ModelInfo[] = MODELS;
+    let pool: readonly ModelInfo[] = allModels;
     if (tab === "favorites") {
       pool = pool.filter((m) => favoriteIds.includes(m.id));
     } else if (tab === "recent") {
@@ -313,7 +330,7 @@ function ModelDropdown() {
       );
     }
     return pool;
-  }, [activeProvider, favoriteIds, recentIds, search, tab]);
+  }, [activeProvider, allModels, favoriteIds, recentIds, search, tab]);
 
   const remoteFiltered = useMemo(() => {
     if (activeProvider === null) return [];
@@ -321,12 +338,12 @@ function ModelDropdown() {
     if (!models) return [];
     const q = search.trim().toLowerCase();
     const staticIds = new Set<string>(
-      MODELS.filter((m) => m.provider === activeProvider).map((m) => m.id),
+      allModels.filter((m) => m.provider === activeProvider).map((m) => m.id),
     );
     const deduped = models.filter((m) => !staticIds.has(m.id));
     if (!q) return deduped;
     return deduped.filter((m) => m.id.toLowerCase().includes(q));
-  }, [activeProvider, remoteModels, search]);
+  }, [activeProvider, allModels, remoteModels, search]);
 
   return (
     <DropdownMenu>
@@ -489,6 +506,7 @@ function ModelDropdown() {
                         inputModalities={rm.input_modalities}
                         providerId={activeProvider!}
                         selected={remoteOverride === rm.id}
+                        favorite={favoriteIds.includes(rm.id)}
                         onPick={() => {
                           const carrier = MODELS.find(
                             (m) => m.provider === activeProvider,
@@ -497,6 +515,7 @@ function ModelDropdown() {
                             selectRemote(carrier.id as ModelId, rm.id);
                           }
                         }}
+                        onToggleFavorite={() => void toggleFavoriteModel(rm.id)}
                       />
                     ))}
                   </>
@@ -743,7 +762,9 @@ function RemoteModelRow({
   inputModalities,
   providerId,
   selected,
+  favorite,
   onPick,
+  onToggleFavorite,
 }: {
   modelId: string;
   ownedBy: string;
@@ -755,11 +776,14 @@ function RemoteModelRow({
   inputModalities?: string[];
   providerId: ProviderId;
   selected: boolean;
+  favorite: boolean;
   onPick: () => void;
+  onToggleFavorite: () => void;
 }) {
   const safePricing = pricing ?? { input: null, output: null };
   const hasPricing = safePricing.input != null || safePricing.output != null;
-  return (
+
+  const inner = (
     <DropdownMenuItem
       onSelect={(e) => {
         e.preventDefault();
@@ -833,6 +857,33 @@ function RemoteModelRow({
         />
       ) : null}
     </DropdownMenuItem>
+  );
+
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>{inner}</ContextMenuTrigger>
+      <ContextMenuContent className="min-w-[140px]">
+        <ContextMenuItem
+          onSelect={() => onToggleFavorite()}
+          className="flex items-center gap-2"
+        >
+          <HugeiconsIcon
+            icon={StarIcon}
+            size={14}
+            strokeWidth={1.75}
+            className={favorite ? "text-amber-500 fill-amber-500" : ""}
+          />
+          <span>{favorite ? "Unfavorite" : "Favorite"}</span>
+        </ContextMenuItem>
+        <ContextMenuItem
+          onSelect={() => void navigator.clipboard.writeText(modelId)}
+          className="flex items-center gap-2"
+        >
+          <HugeiconsIcon icon={CopyIcon} size={14} strokeWidth={1.75} />
+          <span>Copy model ID</span>
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
   );
 }
 
