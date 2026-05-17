@@ -5,6 +5,7 @@ import {
   ResizablePanelGroup,
 } from "@/components/ui/resizable";
 import type { SearchAddon } from "@xterm/addon-search";
+import type { WorkspaceEnv } from "@/modules/workspace";
 import { TerminalPane, type TerminalPaneHandle } from "./TerminalPane";
 import type { PaneNode } from "./lib/panes";
 
@@ -19,6 +20,8 @@ type Props = {
   node: PaneNode;
   tabVisible: boolean;
   activeLeafId: number;
+  /** Workspace env shared by every leaf inside this tab. */
+  workspace?: WorkspaceEnv;
   onFocusLeaf: (leafId: number) => void;
   getBundle: (leafId: number) => LeafBundle;
 };
@@ -27,6 +30,7 @@ export function PaneTreeView({
   node,
   tabVisible,
   activeLeafId,
+  workspace,
   onFocusLeaf,
   getBundle,
 }: Props) {
@@ -51,6 +55,7 @@ export function PaneTreeView({
           visible={tabVisible}
           focused={focused}
           initialCwd={node.cwd}
+          workspace={workspace}
           ref={b.setRef}
           onSearchReady={(_id, addon) => b.onSearch(addon)}
           onCwd={(_id, cwd) => b.onCwd(cwd)}
@@ -72,6 +77,7 @@ export function PaneTreeView({
               node={child}
               tabVisible={tabVisible}
               activeLeafId={activeLeafId}
+              workspace={workspace}
               onFocusLeaf={onFocusLeaf}
               getBundle={getBundle}
             />

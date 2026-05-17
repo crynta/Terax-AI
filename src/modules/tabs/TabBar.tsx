@@ -3,12 +3,18 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { fmtShortcut, MOD_KEY } from "@/lib/platform";
+import { fmtShortcut, IS_WINDOWS, MOD_KEY } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { fileIconUrl } from "@/modules/explorer/lib/iconResolver";
+import {
+  useWorkspaceEnvStore,
+  type WorkspaceEnv,
+} from "@/modules/workspace";
 import {
   Cancel01Icon,
   ComputerTerminal02Icon,
@@ -17,6 +23,7 @@ import {
   IncognitoIcon,
   PencilEdit02Icon,
   PlusSignIcon,
+  ServerStack03Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useEffect, useRef } from "react";
@@ -26,7 +33,13 @@ type Props = {
   tabs: Tab[];
   activeId: number;
   onSelect: (id: number) => void;
-  onNew: () => void;
+  /**
+   * Open a new terminal tab. `workspace` overrides the env the new tab
+   * uses (passed by the WSL-distro menu items on Windows); when omitted,
+   * the caller picks (active terminal tab's env, then the store's
+   * defaultEnv).
+   */
+  onNew: (workspace?: WorkspaceEnv) => void;
   onNewPrivate: () => void;
   onNewPreview: () => void;
   onNewEditor: () => void;
@@ -49,6 +62,17 @@ export function TabBar({
   compact,
 }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const distros = useWorkspaceEnvStore((s) => s.distros);
+  const distrosLoading = useWorkspaceEnvStore((s) => s.loading);
+  const refreshDistros = useWorkspaceEnvStore((s) => s.refreshDistros);
+  // Fetch distros lazily the first time the user opens the new-tab menu —
+  // wsl.exe --list takes ~100ms and shouldn't run on every app launch.
+  const handleMenuOpen = (open: boolean) => {
+    if (!open) return;
+    if (IS_WINDOWS && distros.length === 0 && !distrosLoading) {
+      void refreshDistros();
+    }
+  };
 
   // Horizontal wheel scroll without holding shift.
   useEffect(() => {
@@ -142,7 +166,7 @@ export function TabBar({
             })}
           </TabsList>
         </Tabs>
-        <DropdownMenu>
+        <DropdownMenu onOpenChange={handleMenuOpen}>
           <DropdownMenuTrigger asChild>
             <Button
               variant="ghost"
@@ -153,18 +177,52 @@ export function TabBar({
               <HugeiconsIcon icon={PlusSignIcon} size={14} strokeWidth={2} />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="min-w-44">
+          <DropdownMenuContent align="start" className="min-w-56">
+            {/* Default terminal entry — picks env at call time (active tab's
+                workspace, then store defaultEnv). On non-Windows this is
+                the only terminal option since there are no WSL distros to
+                disambiguate against. */}
             <DropdownMenuItem onSelect={() => onNew()}>
               <HugeiconsIcon
                 icon={ComputerTerminal02Icon}
                 size={14}
                 strokeWidth={1.75}
               />
-              <span className="flex-1">Terminal</span>
+              <span className="flex-1">
+                {IS_WINDOWS ? "Terminal (Windows)" : "Terminal"}
+              </span>
               <span className="text-xs text-muted-foreground">
                 {fmtShortcut(MOD_KEY, "T")}
               </span>
             </DropdownMenuItem>
+            {IS_WINDOWS && (
+              <>
+                {distros.length > 0 ? (
+                  distros.map((d) => (
+                    <DropdownMenuItem
+                      key={d.name}
+                      onSelect={() =>
+                        onNew({ kind: "wsl", distro: d.name })
+                      }
+                    >
+                      <HugeiconsIcon
+                        icon={ServerStack03Icon}
+                        size={14}
+                        strokeWidth={1.75}
+                      />
+                      <span className="flex-1 truncate">WSL: {d.name}</span>
+                    </DropdownMenuItem>
+                  ))
+                ) : (
+                  <DropdownMenuLabel className="text-[11px] font-normal text-muted-foreground">
+                    {distrosLoading
+                      ? "Loading WSL distros…"
+                      : "No WSL distros found"}
+                  </DropdownMenuLabel>
+                )}
+                <DropdownMenuSeparator />
+              </>
+            )}
             <DropdownMenuItem onSelect={() => onNewPrivate()}>
               <HugeiconsIcon
                 icon={IncognitoIcon}

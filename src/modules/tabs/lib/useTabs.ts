@@ -11,6 +11,7 @@ import {
   type SplitDir,
 } from "@/modules/terminal/lib/panes";
 import { disposeSession } from "@/modules/terminal/lib/useTerminalSession";
+import { LOCAL_WORKSPACE, type WorkspaceEnv } from "@/modules/workspace";
 
 // Matches the renderer slot pool size — over this we'd evict an active leaf.
 export const MAX_PANES_PER_TAB = 4;
@@ -22,6 +23,14 @@ export type TerminalTab = {
   cwd?: string;
   paneTree: PaneNode;
   activeLeafId: number;
+  /**
+   * Workspace environment for every pane in this tab. Set at tab creation
+   * (from the `+` dropdown or inherited from the active tab). Distinct from
+   * the store's `defaultEnv`, which only seeds new tabs and does not affect
+   * existing ones. Optional so older persisted state without this field
+   * falls back to LOCAL_WORKSPACE.
+   */
+  workspace?: WorkspaceEnv;
   /** AI agent cannot read buffer / context of this terminal. */
   private?: boolean;
 };
@@ -99,48 +108,57 @@ export function useTabs(initial?: Partial<TerminalTab>) {
         cwd: initial?.cwd,
         paneTree: { kind: "leaf", id: leafId, cwd: initial?.cwd },
         activeLeafId: leafId,
+        workspace: initial?.workspace ?? LOCAL_WORKSPACE,
       },
     ];
   });
   const [activeId, setActiveId] = useState(1);
   const nextIdRef = useRef(3);
 
-  const newTab = useCallback((cwd?: string) => {
-    const tabId = nextIdRef.current++;
-    const leafId = nextIdRef.current++;
-    setTabs((t) => [
-      ...t,
-      {
-        id: tabId,
-        kind: "terminal",
-        title: "shell",
-        cwd,
-        paneTree: { kind: "leaf", id: leafId, cwd },
-        activeLeafId: leafId,
-      },
-    ]);
-    setActiveId(tabId);
-    return tabId;
-  }, []);
+  const newTab = useCallback(
+    (cwd?: string, workspace: WorkspaceEnv = LOCAL_WORKSPACE) => {
+      const tabId = nextIdRef.current++;
+      const leafId = nextIdRef.current++;
+      setTabs((t) => [
+        ...t,
+        {
+          id: tabId,
+          kind: "terminal",
+          title: workspace.kind === "wsl" ? workspace.distro : "shell",
+          cwd,
+          paneTree: { kind: "leaf", id: leafId, cwd },
+          activeLeafId: leafId,
+          workspace,
+        },
+      ]);
+      setActiveId(tabId);
+      return tabId;
+    },
+    [],
+  );
 
-  const newPrivateTab = useCallback((cwd?: string) => {
-    const tabId = nextIdRef.current++;
-    const leafId = nextIdRef.current++;
-    setTabs((t) => [
-      ...t,
-      {
-        id: tabId,
-        kind: "terminal",
-        title: "private",
-        cwd,
-        paneTree: { kind: "leaf", id: leafId, cwd },
-        activeLeafId: leafId,
-        private: true,
-      },
-    ]);
-    setActiveId(tabId);
-    return tabId;
-  }, []);
+  const newPrivateTab = useCallback(
+    (cwd?: string, workspace: WorkspaceEnv = LOCAL_WORKSPACE) => {
+      const tabId = nextIdRef.current++;
+      const leafId = nextIdRef.current++;
+      setTabs((t) => [
+        ...t,
+        {
+          id: tabId,
+          kind: "terminal",
+          title: "private",
+          cwd,
+          paneTree: { kind: "leaf", id: leafId, cwd },
+          activeLeafId: leafId,
+          workspace,
+          private: true,
+        },
+      ]);
+      setActiveId(tabId);
+      return tabId;
+    },
+    [],
+  );
 
   /**
    * Opens a file in an editor tab.
@@ -525,28 +543,32 @@ export function useTabs(initial?: Partial<TerminalTab>) {
     return closedTab;
   }, []);
 
-  const resetWorkspace = useCallback((cwd?: string) => {
-    const tabId = nextIdRef.current++;
-    const leafId = nextIdRef.current++;
-    let toDispose: number[] = [];
-    setTabs((curr) => {
-      toDispose = curr.flatMap((t) =>
-        t.kind === "terminal" ? leafIds(t.paneTree) : [],
-      );
-      return [
-        {
-          id: tabId,
-          kind: "terminal",
-          title: "shell",
-          cwd,
-          paneTree: { kind: "leaf", id: leafId, cwd },
-          activeLeafId: leafId,
-        },
-      ];
-    });
-    setActiveId(tabId);
-    for (const lid of toDispose) disposeSession(lid);
-  }, []);
+  const resetWorkspace = useCallback(
+    (cwd?: string, workspace: WorkspaceEnv = LOCAL_WORKSPACE) => {
+      const tabId = nextIdRef.current++;
+      const leafId = nextIdRef.current++;
+      let toDispose: number[] = [];
+      setTabs((curr) => {
+        toDispose = curr.flatMap((t) =>
+          t.kind === "terminal" ? leafIds(t.paneTree) : [],
+        );
+        return [
+          {
+            id: tabId,
+            kind: "terminal",
+            title: workspace.kind === "wsl" ? workspace.distro : "shell",
+            cwd,
+            paneTree: { kind: "leaf", id: leafId, cwd },
+            activeLeafId: leafId,
+            workspace,
+          },
+        ];
+      });
+      setActiveId(tabId);
+      for (const lid of toDispose) disposeSession(lid);
+    },
+    [],
+  );
 
   return {
     tabs,

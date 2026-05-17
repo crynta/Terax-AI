@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef } from "react";
 import { DormantRing } from "./dormantRing";
 import { registerCwdHandler, registerPromptTracker } from "./osc-handlers";
 import { openPty, type PtySession } from "./pty-bridge";
+import type { WorkspaceEnv } from "@/modules/workspace";
 import {
   acquireSlot,
   applyFontSize,
@@ -28,6 +29,7 @@ type Session = {
   pty: PtySession | null;
   ptyOpening: boolean;
   initialCwd: string | undefined;
+  workspace: WorkspaceEnv | undefined;
   lastCwd: string | null;
   pendingExit: number | null;
   shellExited: boolean;
@@ -73,7 +75,11 @@ configureRendererPool({
   },
 });
 
-function ensureSession(leafId: number, initialCwd?: string): Session {
+function ensureSession(
+  leafId: number,
+  initialCwd?: string,
+  workspace?: WorkspaceEnv,
+): Session {
   const existing = sessions.get(leafId);
   if (existing) return existing;
 
@@ -81,6 +87,7 @@ function ensureSession(leafId: number, initialCwd?: string): Session {
     pty: null,
     ptyOpening: false,
     initialCwd,
+    workspace,
     lastCwd: null,
     pendingExit: null,
     shellExited: false,
@@ -137,6 +144,7 @@ async function openPtyForSession(
       },
     },
     cwd,
+    s.workspace,
   );
 }
 
@@ -281,6 +289,10 @@ type Options = {
   visible: boolean;
   focused?: boolean;
   initialCwd?: string;
+  /** Workspace env for the PTY this leaf will spawn. Locked at session
+   *  creation; switching the tab to a different env is not a concept — open
+   *  a new tab instead. */
+  workspace?: WorkspaceEnv;
   onSearchReady?: (addon: SearchAddon) => void;
   onExit?: (code: number) => void;
   onCwd?: (cwd: string) => void;
@@ -292,6 +304,7 @@ export function useTerminalSession({
   visible,
   focused = true,
   initialCwd,
+  workspace,
   onSearchReady,
   onExit,
   onCwd,
@@ -301,7 +314,7 @@ export function useTerminalSession({
 
   useEffect(() => {
     let cancelled = false;
-    const s = ensureSession(leafId, initialCwd);
+    const s = ensureSession(leafId, initialCwd, workspace);
     s.ready.then(() => {
       if (cancelled || s.disposed) return;
       const node = container.current;

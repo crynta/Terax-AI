@@ -13,11 +13,25 @@ export type WslDistro = {
 };
 
 type State = {
+  /**
+   * Ambient workspace env — read by every fs / shell / AI tool call.
+   * Auto-synced by App.tsx to the active terminal tab's workspace so the
+   * AI agent operates in the same env the user is looking at. Falls back
+   * to {@link defaultEnv} when the active tab is not a terminal.
+   */
   env: WorkspaceEnv;
+  /**
+   * Env applied to brand-new tabs when no terminal tab is active (or as
+   * the seed on first launch). Set by the status-bar selector and the
+   * `+` button's caret dropdown; persisted across launches (last WSL
+   * distro is restored on next start).
+   */
+  defaultEnv: WorkspaceEnv;
   distros: WslDistro[];
   loading: boolean;
   error: string | null;
   setEnv: (env: WorkspaceEnv) => void;
+  setDefaultEnv: (env: WorkspaceEnv) => void;
   refreshDistros: () => Promise<WslDistro[]>;
 };
 
@@ -25,11 +39,16 @@ export const LOCAL_WORKSPACE: WorkspaceEnv = { kind: "local" };
 
 export const useWorkspaceEnvStore = create<State>((set) => ({
   env: LOCAL_WORKSPACE,
+  defaultEnv: LOCAL_WORKSPACE,
   distros: [],
   loading: false,
   error: null,
-  setEnv: (env) => {
-    set({ env });
+  // Ambient setter — no persistence. Called by App.tsx whenever the active
+  // tab changes so AI / fs / explorer read the right env.
+  setEnv: (env) => set({ env }),
+  // User-chosen default for new tabs. Persisted across launches.
+  setDefaultEnv: (env) => {
+    set({ defaultEnv: env });
     if (env.kind === "wsl") void setLastWslDistro(env.distro);
   },
   refreshDistros: async () => {

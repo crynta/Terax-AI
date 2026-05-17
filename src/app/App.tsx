@@ -64,7 +64,6 @@ import {
 import { ThemeProvider } from "@/modules/theme";
 import { UpdaterDialog } from "@/modules/updater";
 import {
-  getWslHome,
   LOCAL_WORKSPACE,
   useWorkspaceEnvStore,
   type WorkspaceEnv,
@@ -97,7 +96,6 @@ export default function App() {
     splitActivePane,
     closeActivePane,
     closePaneByLeaf,
-    resetWorkspace,
   } = useTabs();
 
   // Mirror `tabs` into a ref so callbacks scheduled with `setTimeout`
@@ -157,6 +155,7 @@ export default function App() {
   const [pendingCloseTab, setPendingCloseTab] = useState<number | null>(null);
   const workspaceEnv = useWorkspaceEnvStore((s) => s.env);
   const setWorkspaceEnv = useWorkspaceEnvStore((s) => s.setEnv);
+  const setDefaultWorkspaceEnv = useWorkspaceEnvStore((s) => s.setDefaultEnv);
   const [pendingDeleteTabs, setPendingDeleteTabs] = useState<number[] | null>(
     null,
   );
@@ -167,46 +166,33 @@ export default function App() {
       .catch(() => setHome(null));
   }, []);
 
+  // Status-bar workspace selector — picks the env that new "+" tabs will
+  // use when no terminal tab is active. Does NOT touch existing tabs and
+  // does NOT close anything. Previous behavior (wipe-all-tabs on switch)
+  // is intentionally removed — each tab now owns its workspace.
   const switchWorkspace = useCallback(
-    async (env: WorkspaceEnv) => {
-      if (
-        env.kind === workspaceEnv.kind &&
-        (env.kind === "local" ||
-          (workspaceEnv.kind === "wsl" && env.distro === workspaceEnv.distro))
-      ) {
-        return;
-      }
-      const dirty = tabsRef.current.some((t) => t.kind === "editor" && t.dirty);
-      if (dirty) {
-        window.alert("Save or close unsaved editor tabs before switching workspace.");
-        return;
-      }
-
-      let nextHome: string | null = null;
-      try {
-        if (env.kind === "wsl") {
-          nextHome = await getWslHome(env.distro);
-        } else {
-          nextHome = (await homeDir()).replace(/\\/g, "/");
-        }
-      } catch (e) {
-        window.alert(String(e));
-        return;
-      }
-
-      for (const id of liveLeavesRef.current) disposeSession(id);
-      searchAddons.current.clear();
-      terminalRefs.current.clear();
-      editorRefs.current.clear();
-      previewRefs.current.clear();
-      setActiveSearchAddon(null);
-      setActiveEditorHandle(null);
-      setWorkspaceEnv(env.kind === "local" ? LOCAL_WORKSPACE : env);
-      setHome(nextHome);
-      resetWorkspace(nextHome ?? undefined);
+    (env: WorkspaceEnv) => {
+      setDefaultWorkspaceEnv(env.kind === "local" ? LOCAL_WORKSPACE : env);
     },
-    [workspaceEnv, setWorkspaceEnv, resetWorkspace],
+    [setDefaultWorkspaceEnv],
   );
+
+  // Mirror the active terminal tab's workspace into the ambient store env
+  // so AI fs tools, the explorer, and other workspace-aware code follow
+  // whichever terminal the user is looking at.
+  useEffect(() => {
+    const tab = activeTerminalTab;
+    if (!tab) return;
+    const next = tab.workspace ?? LOCAL_WORKSPACE;
+    if (
+      next.kind !== workspaceEnv.kind ||
+      (next.kind === "wsl" &&
+        workspaceEnv.kind === "wsl" &&
+        next.distro !== workspaceEnv.distro)
+    ) {
+      setWorkspaceEnv(next);
+    }
+  }, [activeTerminalTab, workspaceEnv, setWorkspaceEnv]);
 
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [newEditorOpen, setNewEditorOpen] = useState(false);
@@ -494,13 +480,38 @@ export default function App() {
     setAskPopup(null);
   }, [askFromSelection]);
 
-  const openNewTab = useCallback(() => {
-    newTab(inheritedCwdForNewTab());
-  }, [newTab, inheritedCwdForNewTab]);
+  // New-tab handler. If `workspace` is provided (caret picked an explicit
+  // env), use it; otherwise inherit from the active terminal tab so Ctrl-T
+  // "feels right" — a WSL tab spawns another WSL tab, a Local tab spawns
+  // another Local. Falls back to the store's defaultEnv when no terminal
+  // tab is active (e.g. user is on an editor or preview tab).
+  const openNewTab = useCallback(
+    (workspace?: WorkspaceEnv) => {
+      const ws =
+        workspace ??
+        activeTerminalTab?.workspace ??
+        useWorkspaceEnvStore.getState().defaultEnv;
+      // Don't carry the active terminal's cwd into a new tab of a
+      // different env — Windows paths inside WSL (and vice versa) just
+      // produce ENOENT spam. Inherit only when envs match.
+      const cwd =
+        ws.kind === (activeTerminalTab?.workspace ?? LOCAL_WORKSPACE).kind &&
+        (ws.kind === "local" ||
+          (activeTerminalTab?.workspace?.kind === "wsl" &&
+            ws.distro === activeTerminalTab.workspace.distro))
+          ? inheritedCwdForNewTab()
+          : undefined;
+      newTab(cwd, ws);
+    },
+    [newTab, activeTerminalTab, inheritedCwdForNewTab],
+  );
 
   const openNewPrivateTab = useCallback(() => {
-    newPrivateTab(inheritedCwdForNewTab());
-  }, [newPrivateTab, inheritedCwdForNewTab]);
+    const ws =
+      activeTerminalTab?.workspace ??
+      useWorkspaceEnvStore.getState().defaultEnv;
+    newPrivateTab(inheritedCwdForNewTab(), ws);
+  }, [newPrivateTab, activeTerminalTab, inheritedCwdForNewTab]);
 
   const sendCd = useCallback(
     (path: string) => {
@@ -626,7 +637,10 @@ export default function App() {
 
   const shortcutHandlers = useMemo<ShortcutHandlers>(
     () => ({
-      "tab.new": openNewTab,
+      // Wrapped so the KeyboardEvent passed by the shortcut runner doesn't
+      // land in the `workspace` parameter and confuse the env-inheritance
+      // logic in openNewTab.
+      "tab.new": () => openNewTab(),
       "tab.newPrivate": openNewPrivateTab,
       "tab.newPreview": () => openPreviewTab(""),
       "tab.newEditor": () => setNewEditorOpen(true),

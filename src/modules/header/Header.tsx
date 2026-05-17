@@ -15,6 +15,7 @@ import {
 } from "@/modules/shortcuts/shortcuts";
 import type { Tab } from "@/modules/tabs";
 import { TabBar } from "@/modules/tabs";
+import type { WorkspaceEnv } from "@/modules/workspace";
 import {
   GridViewIcon,
   KeyboardIcon,
@@ -35,7 +36,7 @@ type Props = {
   tabs: Tab[];
   activeId: number;
   onSelect: (id: number) => void;
-  onNew: () => void;
+  onNew: (workspace?: WorkspaceEnv) => void;
   onNewPrivate: () => void;
   onNewPreview: () => void;
   onNewEditor: () => void;

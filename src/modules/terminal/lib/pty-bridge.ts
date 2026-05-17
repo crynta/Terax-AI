@@ -1,5 +1,5 @@
 import { invoke, Channel } from "@tauri-apps/api/core";
-import { currentWorkspaceEnv } from "@/modules/workspace";
+import { currentWorkspaceEnv, type WorkspaceEnv } from "@/modules/workspace";
 
 export type PtyHandlers = {
   onData: (bytes: Uint8Array) => void;
@@ -18,6 +18,7 @@ export async function openPty(
   rows: number,
   handlers: PtyHandlers,
   cwd?: string,
+  workspace?: WorkspaceEnv,
 ): Promise<PtySession> {
   // Raw bytes — no base64/JSON round-trip; messages arrive as ArrayBuffer.
   const onData = new Channel<ArrayBuffer>();
@@ -42,7 +43,10 @@ export async function openPty(
     cols,
     rows,
     cwd: cwd ?? null,
-    workspace: currentWorkspaceEnv(),
+    // Per-tab workspace if the caller specified one; otherwise fall back to
+    // the ambient default. New code paths always pass the tab's workspace —
+    // the fallback is only there to keep older non-tab callers working.
+    workspace: workspace ?? currentWorkspaceEnv(),
     onData,
     onExit,
   });
