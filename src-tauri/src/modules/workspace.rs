@@ -205,23 +205,18 @@ fn resolve_wsl_shell_from_outputs(passwd: &str, shell_env: &str) -> WslShellReso
 }
 
 #[cfg(windows)]
-pub fn resolve_wsl_shell(distro: String) -> Result<WslShellResolution, String> {
-    let passwd = run_wsl(&[
+pub fn resolve_wsl_shell(distro: &str) -> Result<WslShellResolution, String> {
+    let output = run_wsl(&[
         "-d",
-        &distro,
+        distro,
         "--exec",
         "sh",
         "-lc",
-        "getent passwd \"$(id -un)\" 2>/dev/null || true",
+        "getent passwd \"$(id -un)\" 2>/dev/null || true; printf '\\n__TERAX_WSL_SHELL_SEP__\\n'; printf %s \"${SHELL:-}\"",
     ])?;
-    let shell_env = run_wsl(&[
-        "-d",
-        &distro,
-        "--exec",
-        "sh",
-        "-lc",
-        "printf %s \"${SHELL:-}\"",
-    ])?;
+    let (passwd, shell_env) = output
+        .split_once("\n__TERAX_WSL_SHELL_SEP__\n")
+        .unwrap_or((&output, ""));
     Ok(resolve_wsl_shell_from_outputs(&passwd, &shell_env))
 }
 

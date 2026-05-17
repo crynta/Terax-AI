@@ -353,7 +353,7 @@ mod windows {
     }
 
     fn build_wsl(cwd: Option<String>, distro: String) -> Result<CommandBuilder, String> {
-        let resolved_shell = crate::modules::workspace::resolve_wsl_shell(distro.clone())?;
+        let resolved_shell = crate::modules::workspace::resolve_wsl_shell(&distro)?;
         if resolved_shell.source == WslShellSource::Fallback {
             log::warn!("WSL shell resolution fell back to /bin/bash for {distro}");
         }
