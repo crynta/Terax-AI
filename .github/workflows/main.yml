@@ -37,6 +37,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      
+
       - name: Install host build dependencies
         run: |
           sudo apt-get update
@@ -44,7 +46,8 @@ jobs:
             build-essential \
             curl wget file \
             libssl-dev \
-            pkg-config
+            pkg-config \
+            libtalloc-dev
 
       - name: Setup Java 17
         uses: actions/setup-java@v4
