@@ -594,6 +594,17 @@ export default function App() {
 
   const activeFilePath = activeTab?.kind === "editor" ? activeTab.path : null;
 
+  const isPreviewableFile = useCallback((path: string | null) => {
+    if (!path) return false;
+    const normalized = path.toLowerCase();
+    return (
+      normalized.endsWith(".md") ||
+      normalized.endsWith(".markdown") ||
+      normalized.endsWith(".html") ||
+      normalized.endsWith(".htm")
+    );
+  }, []);
+
   const openPreviewTab = useCallback(
     (url: string) => {
       const id = newPreviewTab(url);
@@ -604,6 +615,13 @@ export default function App() {
       return id;
     },
     [newPreviewTab],
+  );
+
+  const handlePreviewFile = useCallback(
+    (path: string) => {
+      openPreviewTab(`file://${path}`);
+    },
+    [openPreviewTab],
   );
 
   const splitActivePaneInActiveTab = useCallback(
@@ -629,6 +647,11 @@ export default function App() {
       "tab.new": openNewTab,
       "tab.newPrivate": openNewPrivateTab,
       "tab.newPreview": () => openPreviewTab(""),
+      "tab.previewCurrent": () => {
+        if (isPreviewableFile(activeFilePath)) {
+          openPreviewTab(`file://${activeFilePath}`);
+        }
+      },
       "tab.newEditor": () => setNewEditorOpen(true),
       "tab.close": handleCloseTabOrPane,
       "tab.next": () => cycleTab(1),
@@ -844,6 +867,7 @@ export default function App() {
                     ref={explorerRef}
                     rootPath={explorerRoot}
                     onOpenFile={handleOpenFile}
+                    onPreviewFile={handlePreviewFile}
                     onPathRenamed={handlePathRenamed}
                     onPathDeleted={handlePathDeleted}
                     onRevealInTerminal={cdInNewTab}

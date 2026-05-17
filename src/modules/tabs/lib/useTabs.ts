@@ -81,6 +81,9 @@ function basename(path: string): string {
 function titleFromUrl(url: string): string {
   try {
     const u = new URL(url);
+    if (u.protocol === "file:") {
+      return basename(u.pathname) || "preview";
+    }
     return u.host || url;
   } catch {
     return url || "preview";

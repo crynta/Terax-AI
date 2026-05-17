@@ -8,6 +8,7 @@ export type ShortcutId =
   | "tab.new"
   | "tab.newPrivate"
   | "tab.newPreview"
+  | "tab.previewCurrent"
   | "tab.newEditor"
   | "tab.close"
   | "tab.next"
@@ -83,6 +84,12 @@ export const SHORTCUTS: Shortcut[] = [
     label: "New preview tab",
     group: "Tabs",
     defaultBindings: [{ [MOD_PROP]: true, key: "p" }],
+  },
+  {
+    id: "tab.previewCurrent",
+    label: "Preview current file",
+    group: "Tabs",
+    defaultBindings: [{ [MOD_PROP]: true, shift: true, key: "v" }],
   },
   {
     id: "tab.newEditor",

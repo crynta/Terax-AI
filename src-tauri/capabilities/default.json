@@ -19,6 +19,13 @@
     "core:event:allow-listen",
     "core:event:allow-unlisten",
     "opener:default",
+    {
+      "identifier": "opener:allow-open-path",
+      "allow": [
+        { "path": "$HOME/**" }
+      ]
+    },
+    "opener:allow-open-url",
     "log:default",
     "os:default",
     "store:default",

@@ -33,6 +33,7 @@ type Props = {
    * omitting it means the caller decides the default (preview).
    */
   onOpenFile: (path: string, pin?: boolean) => void;
+  onPreviewFile?: (path: string) => void;
   onRevealInTerminal?: (path: string) => void;
   onAttachToAgent?: (path: string) => void;
   selectedPath: string | null;
@@ -46,6 +47,7 @@ function FileTreeNodeImpl({
   depth,
   tree,
   onOpenFile,
+  onPreviewFile,
   onRevealInTerminal,
   onAttachToAgent,
   selectedPath,
@@ -148,6 +150,14 @@ function FileTreeNodeImpl({
               onSelect={() => onOpenFile(path, true)}
             >
               Open
+            </ContextMenuItem>
+          )}
+          {!isDir && (path.endsWith(".md") || path.endsWith(".html") || path.endsWith(".htm")) && onPreviewFile && (
+            <ContextMenuItem
+              className={COMPACT_ITEM}
+              onSelect={() => onPreviewFile(path)}
+            >
+              Preview
             </ContextMenuItem>
           )}
           {isDir && onRevealInTerminal && (
@@ -276,6 +286,7 @@ function FileTreeNodeImpl({
             depth={depth + 1}
             tree={tree}
             onOpenFile={onOpenFile}
+            onPreviewFile={onPreviewFile}
             onRevealInTerminal={onRevealInTerminal}
             onAttachToAgent={onAttachToAgent}
             selectedPath={selectedPath}

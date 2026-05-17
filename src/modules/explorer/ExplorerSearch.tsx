@@ -47,6 +47,7 @@ const DEBOUNCE_MS = 300;
 type Props = {
   rootPath: string;
   onOpenFile: (path: string) => void;
+  onPreviewFile?: (path: string) => void;
   open: boolean;
   onRequestClose: () => void;
   onActiveChange?: (active: boolean) => void;
@@ -62,6 +63,7 @@ export type ExplorerSearchHandle = {
 export const ExplorerSearch = forwardRef<ExplorerSearchHandle, Props>(function ExplorerSearch({
   rootPath,
   onOpenFile,
+  onPreviewFile,
   open,
   onRequestClose,
   onActiveChange,
@@ -81,6 +83,16 @@ export const ExplorerSearch = forwardRef<ExplorerSearchHandle, Props>(function E
   const lastKeyboardNavAt = useRef(0);
 
   const active = query.trim().length > 0;
+
+  const isPreviewableFile = (path: string) => {
+    const normalized = path.toLowerCase();
+    return (
+      normalized.endsWith(".md") ||
+      normalized.endsWith(".markdown") ||
+      normalized.endsWith(".html") ||
+      normalized.endsWith(".htm")
+    );
+  };
 
   useEffect(() => {
     onActiveChange?.(active);
@@ -283,6 +295,16 @@ export const ExplorerSearch = forwardRef<ExplorerSearchHandle, Props>(function E
                           Open
                         </ContextMenuItem>
                       )}
+                      {!hit.is_dir &&
+                        onPreviewFile &&
+                        isPreviewableFile(hit.path) && (
+                          <ContextMenuItem
+                            className={COMPACT_ITEM}
+                            onSelect={() => onPreviewFile(hit.path)}
+                          >
+                            Preview
+                          </ContextMenuItem>
+                        )}
                       {hit.is_dir && onRevealInTerminal && (
                         <ContextMenuItem
                           className={COMPACT_ITEM}
