@@ -44,11 +44,24 @@ if [ -z "$__TERAX_HOOKS_LOADED" ]; then
       __TERAX_PS1_INJECTED=1
     fi
     printf '\e]133;A\e\\'
+    # Self-reinstall: some distros (Kali's stock .bashrc, line 104) set
+    # PROMPT_COMMAND to a literal `PROMPT_COMMAND=echo` assignment that
+    # silently overwrites our hook on the first prompt. Re-prepending here
+    # makes the next prompt include us again — turning a one-shot clobber
+    # into a one-prompt blip.
+    case ":${PROMPT_COMMAND:-}:" in
+      *":_terax_precmd:"*) ;;
+      *) PROMPT_COMMAND="_terax_precmd${PROMPT_COMMAND:+;$PROMPT_COMMAND}" ;;
+    esac
   }
 
+  # Append (not prepend) so distros that REASSIGN PROMPT_COMMAND inside
+  # their first-prompt code (vs. appending to it) clobber themselves
+  # FIRST and we get the last word — at which point the self-reinstall in
+  # _terax_precmd takes over for every subsequent prompt.
   case ":${PROMPT_COMMAND:-}:" in
     *":_terax_precmd:"*) ;;
-    *) PROMPT_COMMAND="_terax_precmd${PROMPT_COMMAND:+;$PROMPT_COMMAND}" ;;
+    *) PROMPT_COMMAND="${PROMPT_COMMAND:+$PROMPT_COMMAND;}_terax_precmd" ;;
   esac
 
   # Pre-exec marker via PS0 (bash 4.4+). PS0 is expanded just before a command
