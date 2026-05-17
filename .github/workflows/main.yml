@@ -102,9 +102,15 @@ jobs:
           url="https://dl-cdn.alpinelinux.org/alpine/${ALPINE_BRANCH}/releases/aarch64/alpine-minirootfs-${ALPINE_VERSION}-aarch64.tar.gz"
           echo "Fetching $url"
           curl -fL -o alpine-rootfs.tar.gz "$url"
-          curl -fL -o alpine-rootfs.tar.gz.sha256 "${url}.sha256"
-          sha256sum --check alpine-rootfs.tar.gz.sha256
-          rm alpine-rootfs.tar.gz.sha256
+          EXPECTED=$(curl -fL "${url}.sha256" | awk '{print $1}')
+          ACTUAL=$(sha256sum alpine-rootfs.tar.gz | awk '{print $1}')
+          echo "Expected: $EXPECTED"
+          echo "Actual:   $ACTUAL"
+          if [ "$EXPECTED" != "$ACTUAL" ]; then
+            echo "SHA256 mismatch! Aborting."
+            exit 1
+          fi
+          echo "SHA256 OK"
 
       - name: Build proot for aarch64-linux-android
         run: |
