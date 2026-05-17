@@ -26,6 +26,8 @@ env:
   ALPINE_BRANCH: "v3.19"
   # SHA-256 of alpine-minirootfs-${ALPINE_VERSION}-aarch64.tar.gz from
   # https://dl-cdn.alpinelinux.org/alpine/v3.19/releases/aarch64/
+  #ALPINE_SHA256: "1dffe1adad6f5fee5b58fdf2bdd75ed1c44120e9dccb1d7c5e1547dc8be36a5b"
+  # DELETE this line from the env: block:
   ALPINE_SHA256: "1dffe1adad6f5fee5b58fdf2bdd75ed1c44120e9dccb1d7c5e1547dc8be36a5b"
 
 jobs:
@@ -86,13 +88,23 @@ jobs:
       # placeholders so the repo can build for desktop without dragging in
       # large binaries. Here we overwrite them with the real artifacts.
 
+     # - name: Download Alpine aarch64 minirootfs
+     #   working-directory: src-tauri/assets/android
+     #   run: |
+     #     url="https://dl-cdn.alpinelinux.org/alpine/${ALPINE_BRANCH}/releases/aarch64/alpine-minirootfs-${ALPINE_VERSION}-aarch64.tar.gz"
+     #     echo "Fetching $url"
+     #     curl -fL -o alpine-rootfs.tar.gz "$url"
+      #    echo "${ALPINE_SHA256}  alpine-rootfs.tar.gz" | sha256sum --check -
+
       - name: Download Alpine aarch64 minirootfs
         working-directory: src-tauri/assets/android
         run: |
           url="https://dl-cdn.alpinelinux.org/alpine/${ALPINE_BRANCH}/releases/aarch64/alpine-minirootfs-${ALPINE_VERSION}-aarch64.tar.gz"
           echo "Fetching $url"
           curl -fL -o alpine-rootfs.tar.gz "$url"
-          echo "${ALPINE_SHA256}  alpine-rootfs.tar.gz" | sha256sum --check -
+          curl -fL -o alpine-rootfs.tar.gz.sha256 "${url}.sha256"
+          sha256sum --check alpine-rootfs.tar.gz.sha256
+          rm alpine-rootfs.tar.gz.sha256
 
       - name: Build proot for aarch64-linux-android
         run: |
