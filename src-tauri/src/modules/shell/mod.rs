@@ -1,3 +1,8 @@
+// src-tauri/src/modules/shell/mod.rs
+//
+// One-shot commands, persistent sessions, and background processes.
+// On Android, all shell execution is routed through proot + Alpine.
+
 pub mod background;
 pub mod ringbuffer;
 pub mod session;
@@ -32,10 +37,8 @@ pub struct CommandOutput {
     pub truncated: bool,
 }
 
-/// Runs a one-shot command via the user's login shell. Output is capped and
-/// the process is force-killed on timeout. We deliberately do NOT pipe into
-/// the user's interactive PTY — that would fight their input. AI tool calls
-/// are presented in chat as their own structured result.
+/// Runs a one-shot command via the user's login shell.
+/// On Android this runs inside proot + Alpine.
 #[tauri::command]
 pub async fn shell_run_command(
     command: String,
@@ -65,8 +68,6 @@ pub async fn shell_run_command(
             .clamp(1, MAX_TIMEOUT_SECS),
     );
 
-    // The blocking spawn + wait runs on a worker thread so the Tauri async
-    // runtime stays unblocked.
     let (tx, rx) = mpsc::channel::<Result<CommandOutput, String>>();
     thread::spawn(move || {
         let _ = tx.send(run_blocking(trimmed, cwd_path, workspace, dur));
@@ -91,7 +92,10 @@ fn run_blocking(
     dur: Duration,
 ) -> Result<CommandOutput, String> {
     let mut cmd = build_oneshot_command(&command, &workspace, cwd.as_deref());
-    if let (WorkspaceEnv::Local, Some(dir)) = (&workspace, cwd) {
+    if let (WorkspaceEnv::Local, Some(ref dir)) = (&workspace, &cwd) {
+        // Only set current_dir on non-Android; inside proot the cwd is
+        // set via the -w flag, not via the host process cwd.
+        #[cfg(not(target_os = "android"))]
         cmd.current_dir(dir);
     }
     cmd.stdin(Stdio::null())
@@ -106,8 +110,6 @@ fn run_blocking(
     let mut stdout_pipe = child.stdout.take().ok_or("no stdout pipe")?;
     let mut stderr_pipe = child.stderr.take().ok_or("no stderr pipe")?;
 
-    // Drain stdout/stderr on background threads so a full pipe buffer can't
-    // deadlock the child.
     let stdout_handle = thread::spawn(move || drain(&mut stdout_pipe));
     let stderr_handle = thread::spawn(move || drain(&mut stderr_pipe));
 
@@ -140,9 +142,7 @@ fn run_blocking(
     })
 }
 
-// ──────────────────────────────────────────────────────────────────────────
-// Persistent agent shell state + background process state.
-// ──────────────────────────────────────────────────────────────────────────
+// ── Shell state ───────────────────────────────────────────────────────────────
 
 pub struct ShellState {
     sessions: RwLock<HashMap<u32, Arc<ShellSession>>>,
@@ -273,11 +273,46 @@ pub fn shell_bg_list(state: tauri::State<ShellState>) -> Result<Vec<BackgroundPr
     Ok(out)
 }
 
+/// Build a one-shot command that runs in the correct shell for the platform.
+/// On Android: wraps everything inside proot + Alpine's /bin/sh.
 pub(crate) fn build_oneshot_command(
     command: &str,
     #[cfg_attr(not(windows), allow(unused_variables))] workspace: &WorkspaceEnv,
     #[cfg_attr(not(windows), allow(unused_variables))] cwd: Option<&str>,
 ) -> Command {
+    // ── Android: run inside proot ─────────────────────────────────────────────
+    #[cfg(target_os = "android")]
+    {
+        use crate::modules::pty::android::{proot_bin, rootfs_dir};
+        let mut cmd = Command::new(proot_bin());
+        cmd.arg("-0")
+            .arg("-r")
+            .arg(rootfs_dir())
+            .arg("-b")
+            .arg("/proc")
+            .arg("-b")
+            .arg("/dev")
+            .arg("-b")
+            .arg("/sys")
+            .arg("-b")
+            .arg("/data:/data");
+        if let Some(dir) = cwd.filter(|s| !s.is_empty()) {
+            cmd.arg("-w").arg(dir);
+        } else {
+            cmd.arg("-w").arg("/root");
+        }
+        cmd.arg("/bin/sh").arg("-lc").arg(command);
+        cmd.env("TERM", "xterm-256color")
+            .env("HOME", "/root")
+            .env("USER", "root")
+            .env(
+                "PATH",
+                "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+            );
+        return cmd;
+    }
+
+    // ── Windows ───────────────────────────────────────────────────────────────
     #[cfg(windows)]
     if let WorkspaceEnv::Wsl { distro } = workspace {
         let mut cmd = Command::new("wsl.exe");
@@ -288,6 +323,8 @@ pub(crate) fn build_oneshot_command(
         cmd.arg("--exec").arg("sh").arg("-lc").arg(command);
         return cmd;
     }
+
+    // ── Unix (macOS / Linux) ──────────────────────────────────────────────────
     #[cfg(unix)]
     {
         let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
@@ -295,6 +332,8 @@ pub(crate) fn build_oneshot_command(
         cmd.arg("-lc").arg(command);
         cmd
     }
+
+    // ── Windows (non-WSL) ─────────────────────────────────────────────────────
     #[cfg(windows)]
     {
         let shell = crate::modules::pty::shell_init::windows_shell_path();
@@ -335,4 +374,5 @@ fn drain<R: Read>(reader: &mut R) -> (Vec<u8>, bool) {
         }
     }
     (out, truncated)
-}
+        }
+    
