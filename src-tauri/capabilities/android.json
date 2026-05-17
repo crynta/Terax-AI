@@ -6,9 +6,14 @@
   "windows": ["main"],
   "permissions": [
     "core:default",
+    "core:window:allow-show",
+    "core:window:allow-set-focus",
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
     "store:default",
-    "dialog:default",
     "log:default",
-    "os:default"
+    "os:default",
+    "opener:default",
+    "process:default"
   ]
 }
