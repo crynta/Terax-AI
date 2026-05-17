@@ -5,13 +5,7 @@
 mod bootstrap;
 mod modules;
 
-use modules::{fs, net, pty, secrets, shell, workspace};
-
-// ── Settings window (desktop only — Android has no multi-window) ─────────────
-// `Emitter` / `Manager` / `WebviewUrl` / `WebviewWindowBuilder` are only used
-// by this function, so we import them inside the cfg block to avoid
-// unused-import warnings when compiling for Android.
-#[cfg(not(target_os = "android"))]
+use modules::{fs, git, net, pty, secrets, shell, workspace};
 use tauri::{Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 
 #[cfg(not(target_os = "android"))]
@@ -76,25 +70,12 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .manage(pty::PtyState::default())
         .manage(shell::ShellState::default())
-        .manage(secrets::SecretsState::default());
-
-    // ── Desktop-only plugins ──────────────────────────────────────────────────
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    {
-        builder = builder
-            .plugin(tauri_plugin_updater::Builder::new().build())
-            .plugin(
-                tauri_plugin_window_state::Builder::new()
-                    .with_state_flags(
-                        tauri_plugin_window_state::StateFlags::all()
-                            & !tauri_plugin_window_state::StateFlags::VISIBLE,
-                    )
-                    .build(),
-            )
-            .plugin(tauri_plugin_autostart::Builder::new().build());
-    }
-
-    builder
+        .manage(secrets::SecretsState::default())
+        .manage({
+            let registry = workspace::WorkspaceRegistry::default();
+            workspace::bootstrap_registry(&registry);
+            registry
+        })
         .invoke_handler(tauri::generate_handler![
             // ── PTY ────────────────────────────────────────────────────────────
             pty::pty_open,
@@ -116,7 +97,23 @@ pub fn run() {
             fs::search::fs_list_files,
             fs::grep::fs_grep,
             fs::grep::fs_glob,
-            // ── Shell ─────────────────────────────────────────────────────────
+            git::commands::git_resolve_repo,
+            git::commands::git_panel_snapshot,
+            git::commands::git_status,
+            git::commands::git_diff,
+            git::commands::git_diff_content,
+            git::commands::git_stage,
+            git::commands::git_unstage,
+            git::commands::git_discard,
+            git::commands::git_commit,
+            git::commands::git_fetch,
+            git::commands::git_pull_ff_only,
+            git::commands::git_push,
+            git::commands::git_log,
+            git::commands::git_show_commit,
+            git::commands::git_commit_files,
+            git::commands::git_commit_file_diff,
+            git::commands::git_remote_url,
             shell::shell_run_command,
             shell::shell_session_open,
             shell::shell_session_run,
@@ -129,7 +126,9 @@ pub fn run() {
             workspace::wsl_list_distros,
             workspace::wsl_default_distro,
             workspace::wsl_home,
-            // ── Secrets ───────────────────────────────────────────────────────
+            workspace::workspace_authorize,
+            workspace::workspace_current_dir,
+            open_settings_window,
             secrets::secrets_get,
             secrets::secrets_set,
             secrets::secrets_delete,
