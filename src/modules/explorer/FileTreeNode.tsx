@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { ArrowRight01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { memo, useCallback, useState } from "react";
+import { DirChildren } from "./DirChildren";
 import { InlineInput } from "./InlineInput";
 import {
   copyToClipboard,
@@ -264,24 +265,20 @@ function FileTreeNodeImpl({
           {children.message}
         </div>
       )}
-      {isDir &&
-        isExpanded &&
-        children?.status === "loaded" &&
-        children.entries.map((child) => (
-          <FileTreeNode
-            key={child.name}
-            entry={child}
-            parentPath={path}
-            rootPath={rootPath}
-            depth={depth + 1}
-            tree={tree}
-            onOpenFile={onOpenFile}
-            onRevealInTerminal={onRevealInTerminal}
-            onAttachToAgent={onAttachToAgent}
-            selectedPath={selectedPath}
-            onSelectPath={onSelectPath}
-          />
-        ))}
+      {isDir && isExpanded && children?.status === "loaded" && (
+        <DirChildren
+          entries={children.entries}
+          parentPath={path}
+          rootPath={rootPath}
+          depth={depth + 1}
+          tree={tree}
+          onOpenFile={onOpenFile}
+          onRevealInTerminal={onRevealInTerminal}
+          onAttachToAgent={onAttachToAgent}
+          selectedPath={selectedPath}
+          onSelectPath={onSelectPath}
+        />
+      )}
     </>
   );
 }

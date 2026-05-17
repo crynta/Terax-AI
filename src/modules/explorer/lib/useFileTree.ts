@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { currentWorkspaceEnv } from "@/modules/workspace";
 import { usePreferencesStore } from "@/modules/settings/preferences";
+import { isDotfilesGroupKey } from "./partitionDotfiles";
 
 export type DirEntry = {
   name: string;
@@ -107,6 +108,9 @@ export function useFileTree(rootPath: string | null, options?: Options) {
         else next.add(path);
         return next;
       });
+      // The synthetic dotfiles-group node has no backing directory — its
+      // children are a slice of the parent's already-loaded entries.
+      if (isDotfilesGroupKey(path)) return;
       setNodes((curr) => {
         if (!curr[path] || curr[path].status === "error") {
           void fetchChildren(path);
@@ -125,6 +129,8 @@ export function useFileTree(rootPath: string | null, options?: Options) {
         next.add(path);
         return next;
       });
+      // The synthetic dotfiles-group node has no backing directory.
+      if (isDotfilesGroupKey(path)) return;
       setNodes((curr) => {
         if (!curr[path]) void fetchChildren(path);
         return curr;

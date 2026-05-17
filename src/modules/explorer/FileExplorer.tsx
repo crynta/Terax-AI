@@ -22,8 +22,8 @@ import {
   useRef,
   useState,
 } from "react";
+import { DirChildren } from "./DirChildren";
 import { ExplorerSearch, type ExplorerSearchHandle } from "./ExplorerSearch";
-import { FileTreeNode } from "./FileTreeNode";
 import { InlineInput } from "./InlineInput";
 import { copyToClipboard, revealInFinder } from "./lib/contextActions";
 import { fileIconUrl, folderIconUrl } from "./lib/iconResolver";
@@ -336,22 +336,20 @@ export const FileExplorer = forwardRef<FileExplorerHandle, Props>(
                       {root.message}
                     </div>
                   )}
-                  {root?.status === "loaded" &&
-                    root.entries.map((entry) => (
-                      <FileTreeNode
-                        key={entry.name}
-                        entry={entry}
-                        parentPath={rootPath}
-                        rootPath={rootPath}
-                        depth={0}
-                        tree={tree}
-                        onOpenFile={onOpenFile}
-                        onRevealInTerminal={onRevealInTerminal}
-                        onAttachToAgent={onAttachToAgent}
-                        selectedPath={selectedPath}
-                        onSelectPath={setSelectedPath}
-                      />
-                    ))}
+                  {root?.status === "loaded" && (
+                    <DirChildren
+                      entries={root.entries}
+                      parentPath={rootPath}
+                      rootPath={rootPath}
+                      depth={0}
+                      tree={tree}
+                      onOpenFile={onOpenFile}
+                      onRevealInTerminal={onRevealInTerminal}
+                      onAttachToAgent={onAttachToAgent}
+                      selectedPath={selectedPath}
+                      onSelectPath={setSelectedPath}
+                    />
+                  )}
                 </div>
               </div>
             </ContextMenuTrigger>
