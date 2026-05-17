@@ -28,6 +28,7 @@ import { InlineInput } from "./InlineInput";
 import { copyToClipboard, revealInFinder } from "./lib/contextActions";
 import { fileIconUrl, folderIconUrl } from "./lib/iconResolver";
 import { COMPACT_CONTENT, COMPACT_ITEM } from "./lib/menuItemClass";
+import { dotfilesGroupKey, partitionDotfiles } from "./lib/partitionDotfiles";
 import { useFileTree } from "./lib/useFileTree";
 import { useGlobalShortcuts } from "@/modules/shortcuts";
 
@@ -70,23 +71,52 @@ export const FileExplorer = forwardRef<FileExplorerHandle, Props>(
     const searchRef = useRef<ExplorerSearchHandle>(null);
     const containerRef = useRef<HTMLDivElement>(null);
 
+    // Locate a tree row by its data-fs-path. Iterates dataset rather than a CSS
+    // selector so paths with any character (including the NUL byte in synthetic
+    // dotfiles-group keys) match correctly.
+    const findRow = (path: string): HTMLElement | null => {
+      const rows = listRef.current?.querySelectorAll<HTMLElement>(
+        "[data-fs-path]",
+      );
+      if (!rows) return null;
+      for (const row of rows) {
+        if (row.dataset.fsPath === path) return row;
+      }
+      return null;
+    };
+
     type FlatItem = { path: string; isDir: boolean };
     const flat = useMemo<FlatItem[]>(() => {
       if (!rootPath) return [];
       const out: FlatItem[] = [];
-      const walk = (parent: string) => {
+      const grouped = tree.hiddenFiles === "grouped";
+      // Push one directory entry (and recurse into expanded subdirectories).
+      const pushEntry = (parent: string, name: string, kind: string) => {
+        const p = tree.joinPath(parent, name);
+        const isDir = kind === "dir";
+        out.push({ path: p, isDir });
+        if (isDir && tree.expanded.has(p)) walk(p);
+      };
+      function walk(parent: string) {
         const node = tree.nodes[parent];
         if (!node || node.status !== "loaded") return;
-        for (const e of node.entries) {
-          const p = tree.joinPath(parent, e.name);
-          const isDir = e.kind === "dir";
-          out.push({ path: p, isDir });
-          if (isDir && tree.expanded.has(p)) walk(p);
+        if (grouped) {
+          const { regular, dotfiles } = partitionDotfiles(node.entries);
+          if (dotfiles.length > 0) {
+            const groupKey = dotfilesGroupKey(parent);
+            out.push({ path: groupKey, isDir: true });
+            if (tree.expanded.has(groupKey)) {
+              for (const e of dotfiles) pushEntry(parent, e.name, e.kind);
+            }
+          }
+          for (const e of regular) pushEntry(parent, e.name, e.kind);
+          return;
         }
-      };
+        for (const e of node.entries) pushEntry(parent, e.name, e.kind);
+      }
       walk(rootPath);
       return out;
-    }, [rootPath, tree.nodes, tree.expanded, tree.joinPath]);
+    }, [rootPath, tree.nodes, tree.expanded, tree.joinPath, tree.hiddenFiles]);
   
     useEffect(() => {
       if (selectedPath && !flat.some((f) => f.path === selectedPath)) {
@@ -103,10 +133,7 @@ export const FileExplorer = forwardRef<FileExplorerHandle, Props>(
             const first = flat[0].path;
             setSelectedPath(first);
             requestAnimationFrame(() => {
-              const el = listRef.current?.querySelector<HTMLElement>(
-                `[data-fs-path="${CSS.escape(first)}"]`,
-              );
-              el?.scrollIntoView({ block: "nearest" });
+              findRow(first)?.scrollIntoView({ block: "nearest" });
             });
           }
         },
@@ -171,10 +198,7 @@ export const FileExplorer = forwardRef<FileExplorerHandle, Props>(
         const path = flat[clamped].path;
         setSelectedPath(path);
         requestAnimationFrame(() => {
-          const el = listRef.current?.querySelector<HTMLElement>(
-            `[data-fs-path="${CSS.escape(path)}"]`
-          );
-          el?.scrollIntoView({ block: "nearest" });
+          findRow(path)?.scrollIntoView({ block: "nearest" });
         });
       };
   
