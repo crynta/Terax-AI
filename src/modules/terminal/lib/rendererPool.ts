@@ -8,6 +8,7 @@ import { SerializeAddon } from "@xterm/addon-serialize";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { Terminal } from "@xterm/xterm";
+import { terminalWordNavigationSequence } from "./keymap";
 
 export const POOL_MAX_SIZE = 5;
 const FIT_DEBOUNCE_MS = 8;
@@ -135,6 +136,12 @@ function createSlot(): Slot {
     if (leafId === null) return false;
     const bridge = adapter?.resolveLeaf(leafId);
     if (!bridge) return true;
+    const wordNavigation = terminalWordNavigationSequence(event);
+    if (wordNavigation) {
+      event.preventDefault();
+      if (event.type === "keydown") bridge.writeToPty(wordNavigation);
+      return false;
+    }
     if (isCtrlBackspace(event)) {
       event.preventDefault();
       if (event.type === "keydown") bridge.writeToPty("\x17");
