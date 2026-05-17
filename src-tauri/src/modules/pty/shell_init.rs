@@ -87,11 +87,15 @@ fn ensure_utf8_locale(cmd: &mut CommandBuilder) {
     cmd.env("LANG", fallback);
 }
 
-fn apply_common(cmd: &mut CommandBuilder, cwd: Option<String>) {
+fn apply_common_env(cmd: &mut CommandBuilder) {
     cmd.env("TERM", "xterm-256color");
     cmd.env("COLORTERM", "truecolor");
     cmd.env("TERAX_TERMINAL", "1");
     ensure_utf8_locale(cmd);
+}
+
+fn apply_common(cmd: &mut CommandBuilder, cwd: Option<String>) {
+    apply_common_env(cmd);
 
     let resolved_cwd = cwd
         .map(PathBuf::from)
@@ -355,8 +359,7 @@ mod windows {
         }
         let shell_kind = classify_shell(&resolved_shell.path);
         let mut cmd = CommandBuilder::new("wsl.exe");
-        super::apply_common(&mut cmd, None);
-        cmd.clear_cwd();
+        super::apply_common_env(&mut cmd);
         apply_wsl_base_args(
             &mut cmd,
             &distro,
