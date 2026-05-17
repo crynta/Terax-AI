@@ -789,7 +789,7 @@ function RemoteModelRow({
         </div>
         <div className="flex items-center gap-1.5">
           {contextLength != null ? (
-            <span className="text-[9px] leading-none text-muted-foreground/40 tabular-nums">
+            <span className="text-[7px] leading-none text-muted-foreground/90 tabular-nums">
               {contextLength >= 1_000_000
                 ? `${(contextLength / 1_000_000).toFixed(contextLength % 1_000_000 === 0 ? 0 : 1)}M ctx`
                 : contextLength >= 1_000
@@ -798,27 +798,27 @@ function RemoteModelRow({
             </span>
           ) : null}
           {hasPricing ? (
-            <span className="text-[9px] leading-none text-muted-foreground/40 tabular-nums">
+            <span className="text-[7px] leading-none text-muted-foreground/90 tabular-nums">
               ${safePricing.input?.toFixed(2) ?? "?"}/${safePricing.output?.toFixed(2) ?? "?"}
             </span>
           ) : null}
           {supportsTools ? (
-            <span className="text-[9px] leading-none text-muted-foreground/50">
-              <HugeiconsIcon icon={PlugIcon} size={9} className="inline -mt-px mr-px" />T
+            <span className="text-[7px] leading-none text-muted-foreground/90">
+                <HugeiconsIcon icon={PlugIcon} size={7} className="inline -mt-px mr-px" />T
             </span>
           ) : null}
           {supportsReasoning ? (
-            <span className="text-[9px] leading-none text-muted-foreground/50">
-              <HugeiconsIcon icon={BrainIcon} size={9} className="inline -mt-px mr-px" />R
+            <span className="text-[7px] leading-none text-muted-foreground/90">
+              <HugeiconsIcon icon={BrainIcon} size={7} className="inline -mt-px mr-px" />R
             </span>
           ) : null}
           {(inputModalities?.filter((m) => m !== "text").length ?? 0) > 0 ? (
-            <span className="text-[9px] leading-none text-muted-foreground/50">
+            <span className="text-[7px] leading-none text-muted-foreground/90">
               {inputModalities!.filter((m) => m !== "text").map((m) => m[0].toUpperCase()).join("/")}
             </span>
           ) : null}
           {(providerCount ?? 0) > 0 ? (
-            <span className="text-[9px] leading-none text-muted-foreground/30 tabular-nums">
+            <span className="text-[7px] leading-none text-muted-foreground/90 tabular-nums">
               {providerCount}P
             </span>
           ) : null}
