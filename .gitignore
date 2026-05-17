@@ -22,6 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+openspec
 .codex
 
 *.tsbuildinfo
