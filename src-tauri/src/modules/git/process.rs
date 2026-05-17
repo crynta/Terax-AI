@@ -37,7 +37,9 @@ fn availability_cell() -> &'static Mutex<Option<AvailabilityCache>> {
 
 pub fn ensure_git_available() -> Result<()> {
     let cached = {
-        let guard = availability_cell().lock().expect("git availability poisoned");
+        let guard = availability_cell()
+            .lock()
+            .expect("git availability poisoned");
         guard
             .as_ref()
             .filter(|entry| entry.checked_at.elapsed() < AVAILABILITY_TTL)
@@ -47,7 +49,9 @@ pub fn ensure_git_available() -> Result<()> {
         Some(v) => v,
         None => {
             let fresh = check_git_availability();
-            let mut guard = availability_cell().lock().expect("git availability poisoned");
+            let mut guard = availability_cell()
+                .lock()
+                .expect("git availability poisoned");
             *guard = Some(AvailabilityCache {
                 value: fresh.clone(),
                 checked_at: Instant::now(),
@@ -221,9 +225,7 @@ where
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
 
-    let child = Arc::new(
-        SharedChild::spawn(&mut cmd).map_err(|e| GitError::Spawn(e.to_string()))?,
-    );
+    let child = Arc::new(SharedChild::spawn(&mut cmd).map_err(|e| GitError::Spawn(e.to_string()))?);
     let mut stdout_pipe = child
         .take_stdout()
         .ok_or_else(|| GitError::Spawn("no stdout pipe".into()))?;
@@ -346,7 +348,10 @@ mod tests {
 
     #[test]
     fn extracts_simple_version() {
-        assert_eq!(parse_git_version("git version 2.42.0"), Some("2.42.0".into()));
+        assert_eq!(
+            parse_git_version("git version 2.42.0"),
+            Some("2.42.0".into())
+        );
     }
 
     #[test]

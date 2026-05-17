@@ -4,18 +4,28 @@ use std::path::PathBuf;
 #[derive(Debug)]
 pub enum GitError {
     NotInstalled,
-    TooOld { found: String, required: &'static str },
+    TooOld {
+        found: String,
+        required: &'static str,
+    },
     NotADirectory(String),
     PathOutsideWorkspace(PathBuf),
     InvalidPath(String),
-    FileTooLarge { path: PathBuf, size: u64, max: u64 },
+    FileTooLarge {
+        path: PathBuf,
+        size: u64,
+        max: u64,
+    },
     SymlinkRejected(PathBuf),
     NoUpstream,
     AuthRequired(String),
     HostKeyUnverified,
     TimedOut(&'static str),
     EmptyCommitMessage,
-    CommandFailed { context: &'static str, detail: String },
+    CommandFailed {
+        context: &'static str,
+        detail: String,
+    },
     Spawn(String),
     Io(std::io::Error),
 }

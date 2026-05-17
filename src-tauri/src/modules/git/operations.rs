@@ -36,17 +36,11 @@ fn resolve_repo_in_authorized(
     let canonical_root = canonical_dir(&root_line)?;
     let _ = registry.authorize(&canonical_root);
 
-    let basics = git_stdout_lines(
-        &canonical_root,
-        ["rev-parse", "--abbrev-ref", "HEAD"],
-    )?;
-    let head = basics
-        .into_iter()
-        .next()
-        .ok_or(GitError::CommandFailed {
-            context: "failed to resolve HEAD",
-            detail: String::new(),
-        })?;
+    let basics = git_stdout_lines(&canonical_root, ["rev-parse", "--abbrev-ref", "HEAD"])?;
+    let head = basics.into_iter().next().ok_or(GitError::CommandFailed {
+        context: "failed to resolve HEAD",
+        detail: String::new(),
+    })?;
 
     let upstream = git_stdout_line_opt(
         &canonical_root,
@@ -326,17 +320,11 @@ pub fn commit(
     }
     ensure_success(&output, "git commit failed")?;
 
-    let combined = git_stdout_lines(
-        &repo_root,
-        ["show", "-s", "--format=%H%n%s", "HEAD"],
-    )?;
-    let sha = combined
-        .first()
-        .cloned()
-        .ok_or(GitError::CommandFailed {
-            context: "failed to resolve commit sha",
-            detail: String::new(),
-        })?;
+    let combined = git_stdout_lines(&repo_root, ["show", "-s", "--format=%H%n%s", "HEAD"])?;
+    let sha = combined.first().cloned().ok_or(GitError::CommandFailed {
+        context: "failed to resolve commit sha",
+        detail: String::new(),
+    })?;
     let summary = combined.get(1).cloned().unwrap_or_default();
 
     Ok(GitCommitResult {
@@ -534,9 +522,7 @@ fn parse_shortstat(tail: &str) -> (u32, u32, u32) {
 }
 
 fn sha_is_safe(sha: &str) -> bool {
-    !sha.is_empty()
-        && sha.len() <= 64
-        && sha.chars().all(|c| c.is_ascii_hexdigit())
+    !sha.is_empty() && sha.len() <= 64 && sha.chars().all(|c| c.is_ascii_hexdigit())
 }
 
 pub fn commit_files(
@@ -742,8 +728,16 @@ fn apply_numstat(files: &mut [GitCommitFileChange], bytes: &[u8]) {
         let removed_raw = cols.next().unwrap_or("0");
         let inline_path = cols.next().unwrap_or("");
         let is_binary = added_raw == "-" && removed_raw == "-";
-        let added: u32 = if is_binary { 0 } else { added_raw.parse().unwrap_or(0) };
-        let removed: u32 = if is_binary { 0 } else { removed_raw.parse().unwrap_or(0) };
+        let added: u32 = if is_binary {
+            0
+        } else {
+            added_raw.parse().unwrap_or(0)
+        };
+        let removed: u32 = if is_binary {
+            0
+        } else {
+            removed_raw.parse().unwrap_or(0)
+        };
 
         let (path, original) = if inline_path.is_empty() {
             let original = tokens.get(idx).map(|s| s.to_string()).unwrap_or_default();
@@ -796,7 +790,11 @@ pub fn fetch(registry: &WorkspaceRegistry, repo_root: &str) -> Result<()> {
 pub fn pull_ff_only(registry: &WorkspaceRegistry, repo_root: &str) -> Result<()> {
     let repo_root = authorized_repo_root(registry, repo_root)?;
     ensure_git_available()?;
-    let output = run_git(Some(&repo_root), ["pull", "--ff-only"], NETWORK_TIMEOUT_SECS)?;
+    let output = run_git(
+        Some(&repo_root),
+        ["pull", "--ff-only"],
+        NETWORK_TIMEOUT_SECS,
+    )?;
     ensure_success(&output, "git pull --ff-only failed")
 }
 

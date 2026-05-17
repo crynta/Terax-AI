@@ -21,27 +21,27 @@ where
 }
 
 #[tauri::command]
-pub async fn git_resolve_repo(
-    cwd: String,
-    app: AppHandle,
-) -> Result<Option<GitRepoInfo>, String> {
-    blocking(app, move |r| operations::resolve_repo(r, &cwd).map_err(Into::into)).await
+pub async fn git_resolve_repo(cwd: String, app: AppHandle) -> Result<Option<GitRepoInfo>, String> {
+    blocking(app, move |r| {
+        operations::resolve_repo(r, &cwd).map_err(Into::into)
+    })
+    .await
 }
 
 #[tauri::command]
-pub async fn git_panel_snapshot(
-    cwd: String,
-    app: AppHandle,
-) -> Result<GitPanelSnapshot, String> {
-    blocking(app, move |r| operations::panel_snapshot(r, &cwd).map_err(Into::into)).await
+pub async fn git_panel_snapshot(cwd: String, app: AppHandle) -> Result<GitPanelSnapshot, String> {
+    blocking(app, move |r| {
+        operations::panel_snapshot(r, &cwd).map_err(Into::into)
+    })
+    .await
 }
 
 #[tauri::command]
-pub async fn git_status(
-    repo_root: String,
-    app: AppHandle,
-) -> Result<GitStatusSnapshot, String> {
-    blocking(app, move |r| operations::status(r, &repo_root).map_err(Into::into)).await
+pub async fn git_status(repo_root: String, app: AppHandle) -> Result<GitStatusSnapshot, String> {
+    blocking(app, move |r| {
+        operations::status(r, &repo_root).map_err(Into::into)
+    })
+    .await
 }
 
 #[tauri::command]
@@ -78,7 +78,10 @@ pub async fn git_stage(
     paths: Vec<String>,
     app: AppHandle,
 ) -> Result<(), String> {
-    blocking(app, move |r| operations::stage(r, &repo_root, &paths).map_err(Into::into)).await
+    blocking(app, move |r| {
+        operations::stage(r, &repo_root, &paths).map_err(Into::into)
+    })
+    .await
 }
 
 #[tauri::command]
@@ -87,7 +90,10 @@ pub async fn git_unstage(
     paths: Vec<String>,
     app: AppHandle,
 ) -> Result<(), String> {
-    blocking(app, move |r| operations::unstage(r, &repo_root, &paths).map_err(Into::into)).await
+    blocking(app, move |r| {
+        operations::unstage(r, &repo_root, &paths).map_err(Into::into)
+    })
+    .await
 }
 
 #[tauri::command]
@@ -96,7 +102,10 @@ pub async fn git_discard(
     entries: Vec<DiscardEntry>,
     app: AppHandle,
 ) -> Result<(), String> {
-    blocking(app, move |r| operations::discard(r, &repo_root, &entries).map_err(Into::into)).await
+    blocking(app, move |r| {
+        operations::discard(r, &repo_root, &entries).map_err(Into::into)
+    })
+    .await
 }
 
 #[tauri::command]
@@ -113,17 +122,26 @@ pub async fn git_commit(
 
 #[tauri::command]
 pub async fn git_fetch(repo_root: String, app: AppHandle) -> Result<(), String> {
-    blocking(app, move |r| operations::fetch(r, &repo_root).map_err(Into::into)).await
+    blocking(app, move |r| {
+        operations::fetch(r, &repo_root).map_err(Into::into)
+    })
+    .await
 }
 
 #[tauri::command]
 pub async fn git_pull_ff_only(repo_root: String, app: AppHandle) -> Result<(), String> {
-    blocking(app, move |r| operations::pull_ff_only(r, &repo_root).map_err(Into::into)).await
+    blocking(app, move |r| {
+        operations::pull_ff_only(r, &repo_root).map_err(Into::into)
+    })
+    .await
 }
 
 #[tauri::command]
 pub async fn git_push(repo_root: String, app: AppHandle) -> Result<GitPushResult, String> {
-    blocking(app, move |r| operations::push(r, &repo_root).map_err(Into::into)).await
+    blocking(app, move |r| {
+        operations::push(r, &repo_root).map_err(Into::into)
+    })
+    .await
 }
 
 #[tauri::command]

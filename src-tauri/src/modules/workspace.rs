@@ -50,8 +50,6 @@ pub async fn workspace_current_dir(
     Ok(canonical.to_string_lossy().replace('\\', "/"))
 }
 
-
-
 #[derive(Clone, Debug, Default, Deserialize)]
 #[serde(tag = "kind", rename_all = "lowercase")]
 pub enum WorkspaceEnv {
@@ -126,6 +124,21 @@ pub fn decode_command_output(bytes: &[u8]) -> String {
 }
 
 #[cfg(windows)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum WslShellSource {
+    Passwd,
+    Env,
+    Fallback,
+}
+
+#[cfg(windows)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct WslShellResolution {
+    pub path: String,
+    pub source: WslShellSource,
+}
+
+#[cfg(windows)]
 fn looks_utf16le(bytes: &[u8]) -> bool {
     if bytes.len() < 4 || !bytes.len().is_multiple_of(2) {
         return false;
@@ -145,6 +158,71 @@ fn run_wsl(args: &[&str]) -> Result<String, String> {
         return Err(stderr.trim().to_string());
     }
     Ok(decode_command_output(&out.stdout))
+}
+
+#[cfg(windows)]
+fn parse_passwd_shell(raw: &str) -> Option<String> {
+    let line = raw.trim();
+    if line.is_empty() {
+        return None;
+    }
+    let shell = if line.contains(':') {
+        line.rsplit(':').next().unwrap_or("")
+    } else {
+        line
+    };
+    normalize_wsl_shell(shell)
+}
+
+#[cfg(windows)]
+fn normalize_wsl_shell(raw: &str) -> Option<String> {
+    let shell = raw.trim();
+    if shell.is_empty() {
+        None
+    } else {
+        Some(shell.to_string())
+    }
+}
+
+#[cfg(windows)]
+fn resolve_wsl_shell_from_outputs(passwd: &str, shell_env: &str) -> WslShellResolution {
+    if let Some(path) = parse_passwd_shell(passwd) {
+        return WslShellResolution {
+            path,
+            source: WslShellSource::Passwd,
+        };
+    }
+    if let Some(path) = normalize_wsl_shell(shell_env) {
+        return WslShellResolution {
+            path,
+            source: WslShellSource::Env,
+        };
+    }
+    WslShellResolution {
+        path: "/bin/bash".into(),
+        source: WslShellSource::Fallback,
+    }
+}
+
+#[cfg(windows)]
+pub fn resolve_wsl_shell(distro: String) -> Result<WslShellResolution, String> {
+    let passwd = run_wsl(&[
+        "-d",
+        &distro,
+        "--exec",
+        "sh",
+        "-lc",
+        "getent passwd \"$(id -un)\" 2>/dev/null || true",
+    ])?;
+    let shell_env = run_wsl(&[
+        "-d",
+        &distro,
+        "--exec",
+        "sh",
+        "-lc",
+        "printf %s \"${SHELL:-}\"",
+    ])?;
+    Ok(resolve_wsl_shell_from_outputs(&passwd, &shell_env))
 }
 
 #[cfg(windows)]
@@ -225,5 +303,48 @@ pub fn wsl_home(distro: String) -> Result<String, String> {
         } else {
             Ok(home)
         }
+    }
+}
+
+#[cfg(all(test, windows))]
+mod tests {
+    use super::{
+        decode_command_output, parse_passwd_shell, resolve_wsl_shell_from_outputs, WslShellSource,
+    };
+
+    #[test]
+    fn decode_command_output_handles_utf16le_without_bom() {
+        let bytes = b"h\0i\0";
+        assert_eq!(decode_command_output(bytes), "hi");
+    }
+
+    #[test]
+    fn parse_passwd_shell_extracts_last_field() {
+        let line = "user:x:1000:1000::/home/user:/usr/bin/zsh";
+        assert_eq!(parse_passwd_shell(line).as_deref(), Some("/usr/bin/zsh"));
+    }
+
+    #[test]
+    fn resolve_wsl_shell_prefers_passwd() {
+        let resolved = resolve_wsl_shell_from_outputs(
+            "user:x:1000:1000::/home/user:/usr/bin/fish",
+            "/bin/bash",
+        );
+        assert_eq!(resolved.path, "/usr/bin/fish");
+        assert_eq!(resolved.source, WslShellSource::Passwd);
+    }
+
+    #[test]
+    fn resolve_wsl_shell_falls_back_to_env() {
+        let resolved = resolve_wsl_shell_from_outputs("", "/bin/zsh");
+        assert_eq!(resolved.path, "/bin/zsh");
+        assert_eq!(resolved.source, WslShellSource::Env);
+    }
+
+    #[test]
+    fn resolve_wsl_shell_falls_back_to_bash() {
+        let resolved = resolve_wsl_shell_from_outputs("", "");
+        assert_eq!(resolved.path, "/bin/bash");
+        assert_eq!(resolved.source, WslShellSource::Fallback);
     }
 }

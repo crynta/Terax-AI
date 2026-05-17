@@ -8,8 +8,48 @@ use crate::modules::workspace::WorkspaceEnv;
 const BASHRC_SCRIPT: &str = include_str!("scripts/bashrc.bash");
 
 #[cfg(windows)]
+const ZSHENV_SCRIPT: &str = include_str!("scripts/zshenv.zsh");
+
+#[cfg(windows)]
+const ZPROFILE_SCRIPT: &str = include_str!("scripts/zprofile.zsh");
+
+#[cfg(windows)]
+const ZLOGIN_SCRIPT: &str = include_str!("scripts/zlogin.zsh");
+
+#[cfg(windows)]
+const ZSHRC_SCRIPT: &str = include_str!("scripts/zshrc.zsh");
+
+#[cfg(windows)]
+const FISH_INIT_SCRIPT: &str = include_str!("scripts/init.fish");
+
+#[cfg(windows)]
 fn bashrc_script() -> &'static str {
     BASHRC_SCRIPT
+}
+
+#[cfg(windows)]
+fn zshenv_script() -> &'static str {
+    ZSHENV_SCRIPT
+}
+
+#[cfg(windows)]
+fn zprofile_script() -> &'static str {
+    ZPROFILE_SCRIPT
+}
+
+#[cfg(windows)]
+fn zlogin_script() -> &'static str {
+    ZLOGIN_SCRIPT
+}
+
+#[cfg(windows)]
+fn zshrc_script() -> &'static str {
+    ZSHRC_SCRIPT
+}
+
+#[cfg(windows)]
+fn fish_init_script() -> &'static str {
+    FISH_INIT_SCRIPT
 }
 
 pub fn build_command(
@@ -249,9 +289,27 @@ mod windows {
     use std::path::{Path, PathBuf};
 
     use crate::modules::workspace::WorkspaceEnv;
+    use crate::modules::workspace::{WslShellResolution, WslShellSource};
     use portable_pty::CommandBuilder;
 
     const PROFILE_PS1: &str = include_str!("scripts/profile.ps1");
+    const DEFAULT_WSL_CWD: &str = "~";
+
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    enum ShellKind {
+        Zsh,
+        Bash,
+        Fish,
+        Other,
+    }
+
+    #[derive(Clone, Debug, PartialEq, Eq)]
+    enum WslIntegration {
+        Zsh { zdotdir: String },
+        Bash { rcfile: String },
+        Fish { init: String },
+        None,
+    }
 
     pub fn build(cwd: Option<String>, workspace: WorkspaceEnv) -> Result<CommandBuilder, String> {
         if let WorkspaceEnv::Wsl { distro } = workspace {
@@ -291,44 +349,178 @@ mod windows {
     }
 
     fn build_wsl(cwd: Option<String>, distro: String) -> Result<CommandBuilder, String> {
-        let mut cmd = CommandBuilder::new("wsl.exe");
-        cmd.arg("-d");
-        cmd.arg(&distro);
-        cmd.arg("--cd");
-        cmd.arg(cwd.as_deref().filter(|s| !s.is_empty()).unwrap_or("~"));
-        cmd.arg("--exec");
-        cmd.arg("bash");
-        match prepare_wsl_bash_rcfile(&distro) {
-            Ok(rc) => {
-                cmd.arg("--rcfile");
-                cmd.arg(rc);
-            }
-            Err(e) => {
-                log::warn!("WSL bash shell integration disabled for {distro}: {e}");
-            }
+        let resolved_shell = crate::modules::workspace::resolve_wsl_shell(distro.clone())?;
+        if resolved_shell.source == WslShellSource::Fallback {
+            log::warn!("WSL shell resolution fell back to /bin/bash for {distro}");
         }
-        cmd.arg("-i");
-        cmd.env("TERM", "xterm-256color");
-        cmd.env("COLORTERM", "truecolor");
-        cmd.env("TERAX_TERMINAL", "1");
-        super::ensure_utf8_locale(&mut cmd);
+        let shell_kind = classify_shell(&resolved_shell.path);
+        let mut cmd = CommandBuilder::new("wsl.exe");
+        super::apply_common(&mut cmd, None);
+        cmd.clear_cwd();
+        apply_wsl_base_args(
+            &mut cmd,
+            &distro,
+            cwd.as_deref()
+                .filter(|s| !s.is_empty())
+                .unwrap_or(DEFAULT_WSL_CWD),
+            &resolved_shell.path,
+        );
+
+        let integration = match shell_kind {
+            ShellKind::Zsh => match prepare_wsl_zdotdir(&distro) {
+                Ok(zdotdir) => WslIntegration::Zsh { zdotdir },
+                Err(e) => {
+                    log::warn!("WSL zsh shell integration disabled for {distro}: {e}");
+                    WslIntegration::None
+                }
+            },
+            ShellKind::Bash => match prepare_wsl_bash_rcfile(&distro) {
+                Ok(rcfile) => WslIntegration::Bash { rcfile },
+                Err(e) => {
+                    log::warn!("WSL bash shell integration disabled for {distro}: {e}");
+                    WslIntegration::None
+                }
+            },
+            ShellKind::Fish => match prepare_wsl_fish_init(&distro) {
+                Ok(init) => WslIntegration::Fish { init },
+                Err(e) => {
+                    log::warn!("WSL fish shell integration disabled for {distro}: {e}");
+                    WslIntegration::None
+                }
+            },
+            ShellKind::Other => {
+                log::info!(
+                    "unsupported WSL shell '{}', spawning without integration",
+                    resolved_shell.path
+                );
+                WslIntegration::None
+            }
+        };
+        apply_wsl_shell_behavior(&mut cmd, &resolved_shell, integration);
         log::info!("spawning WSL shell: {distro}");
         Ok(cmd)
     }
 
+    fn classify_shell(shell_path: &str) -> ShellKind {
+        match shell_path.rsplit('/').next().unwrap_or(shell_path) {
+            "zsh" => ShellKind::Zsh,
+            "bash" => ShellKind::Bash,
+            "fish" => ShellKind::Fish,
+            _ => ShellKind::Other,
+        }
+    }
+
+    fn apply_wsl_base_args(cmd: &mut CommandBuilder, distro: &str, cwd: &str, shell_path: &str) {
+        cmd.arg("-d");
+        cmd.arg(distro);
+        cmd.arg("--cd");
+        cmd.arg(cwd);
+        cmd.arg("--exec");
+        cmd.arg(shell_path);
+    }
+
+    fn apply_wsl_shell_behavior(
+        cmd: &mut CommandBuilder,
+        shell: &WslShellResolution,
+        integration: WslIntegration,
+    ) {
+        match integration {
+            WslIntegration::Zsh { zdotdir } => {
+                cmd.env("ZDOTDIR", zdotdir);
+                cmd.arg("-l");
+            }
+            WslIntegration::Bash { rcfile } => {
+                cmd.arg("--rcfile");
+                cmd.arg(rcfile);
+                cmd.arg("-i");
+            }
+            WslIntegration::Fish { init } => {
+                cmd.arg("--init-command");
+                cmd.arg(format!("source {}", shell_quote_str(&init)));
+                cmd.arg("-i");
+            }
+            WslIntegration::None => match classify_shell(&shell.path) {
+                ShellKind::Zsh => cmd.arg("-l"),
+                ShellKind::Bash | ShellKind::Fish => cmd.arg("-i"),
+                ShellKind::Other => {
+                    if shell.source == WslShellSource::Fallback {
+                        cmd.arg("-i");
+                    }
+                }
+            },
+        }
+    }
+
     fn prepare_wsl_bash_rcfile(distro: &str) -> Result<String, String> {
+        let linux_dir = wsl_integration_dir(distro, "bash")?;
+        let linux_rc = format!("{linux_dir}/bashrc");
+        let content = super::bashrc_script().replace("\r\n", "\n");
+        write_wsl_integration_file(distro, &linux_rc, &content)?;
+        Ok(linux_rc)
+    }
+
+    fn prepare_wsl_zdotdir(distro: &str) -> Result<String, String> {
+        let linux_dir = wsl_integration_dir(distro, "zsh")?;
+        write_wsl_integration_file(
+            distro,
+            &format!("{linux_dir}/.zshenv"),
+            &normalize_script(super::zshenv_script()),
+        )?;
+        write_wsl_integration_file(
+            distro,
+            &format!("{linux_dir}/.zprofile"),
+            &normalize_script(super::zprofile_script()),
+        )?;
+        write_wsl_integration_file(
+            distro,
+            &format!("{linux_dir}/.zshrc"),
+            &normalize_script(super::zshrc_script()),
+        )?;
+        write_wsl_integration_file(
+            distro,
+            &format!("{linux_dir}/.zlogin"),
+            &normalize_script(super::zlogin_script()),
+        )?;
+        Ok(linux_dir)
+    }
+
+    fn prepare_wsl_fish_init(distro: &str) -> Result<String, String> {
+        let linux_dir = wsl_integration_dir(distro, "fish")?;
+        let linux_init = format!("{linux_dir}/init.fish");
+        write_wsl_integration_file(
+            distro,
+            &linux_init,
+            &normalize_script(super::fish_init_script()),
+        )?;
+        Ok(linux_init)
+    }
+
+    fn wsl_integration_dir(distro: &str, shell: &str) -> Result<String, String> {
         let home = crate::modules::workspace::wsl_home(distro.to_string())?;
         let linux_dir = format!(
-            "{}/.cache/terax/shell-integration/bash",
+            "{}/.cache/terax/shell-integration/{shell}",
             home.trim_end_matches('/')
         );
-        let linux_rc = format!("{linux_dir}/bashrc");
         let unc_dir = crate::modules::workspace::wsl_path_to_unc(distro, &linux_dir);
         fs::create_dir_all(&unc_dir).map_err(|e| format!("create {}: {e}", unc_dir.display()))?;
-        let unc_file = crate::modules::workspace::wsl_path_to_unc(distro, &linux_rc);
-        let content = super::bashrc_script().replace("\r\n", "\n");
-        write_if_changed(&unc_file, &content)?;
-        Ok(linux_rc)
+        Ok(linux_dir)
+    }
+
+    fn write_wsl_integration_file(
+        distro: &str,
+        linux_path: &str,
+        content: &str,
+    ) -> Result<(), String> {
+        let unc_file = crate::modules::workspace::wsl_path_to_unc(distro, linux_path);
+        write_if_changed(&unc_file, content)
+    }
+
+    fn normalize_script(content: &str) -> String {
+        content.replace("\r\n", "\n")
+    }
+
+    fn shell_quote_str(p: &str) -> String {
+        format!("'{}'", p.replace('\'', "'\\''"))
     }
 
     fn integration_root() -> Result<PathBuf, String> {
@@ -360,6 +552,181 @@ mod windows {
             let _ = fs::remove_file(&tmp);
             format!("rename {} -> {}: {e}", tmp.display(), path.display())
         })
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::{
+            apply_wsl_base_args, apply_wsl_shell_behavior, classify_shell, ShellKind,
+            WslIntegration, DEFAULT_WSL_CWD,
+        };
+        use crate::modules::workspace::{WslShellResolution, WslShellSource};
+        use portable_pty::CommandBuilder;
+
+        fn argv(cmd: &CommandBuilder) -> Vec<String> {
+            cmd.get_argv()
+                .iter()
+                .map(|arg| arg.to_string_lossy().into_owned())
+                .collect()
+        }
+
+        #[test]
+        fn classify_shell_matches_supported_names() {
+            assert_eq!(classify_shell("/usr/bin/zsh"), ShellKind::Zsh);
+            assert_eq!(classify_shell("/bin/bash"), ShellKind::Bash);
+            assert_eq!(classify_shell("/usr/bin/fish"), ShellKind::Fish);
+            assert_eq!(classify_shell("/usr/bin/tcsh"), ShellKind::Other);
+        }
+
+        #[test]
+        fn wsl_zsh_launch_uses_login_shell_and_zdotdir() {
+            let shell = WslShellResolution {
+                path: "/usr/bin/zsh".into(),
+                source: WslShellSource::Passwd,
+            };
+            let mut cmd = CommandBuilder::new("wsl.exe");
+            apply_wsl_base_args(&mut cmd, "Ubuntu", "/work", &shell.path);
+            apply_wsl_shell_behavior(
+                &mut cmd,
+                &shell,
+                WslIntegration::Zsh {
+                    zdotdir: "/home/me/.cache/terax/shell-integration/zsh".into(),
+                },
+            );
+
+            assert_eq!(
+                argv(&cmd),
+                vec![
+                    "wsl.exe",
+                    "-d",
+                    "Ubuntu",
+                    "--cd",
+                    "/work",
+                    "--exec",
+                    "/usr/bin/zsh",
+                    "-l",
+                ]
+            );
+            assert_eq!(
+                cmd.get_env("ZDOTDIR").and_then(|v| v.to_str()),
+                Some("/home/me/.cache/terax/shell-integration/zsh")
+            );
+        }
+
+        #[test]
+        fn wsl_bash_launch_uses_rcfile_and_interactive_mode() {
+            let shell = WslShellResolution {
+                path: "/bin/bash".into(),
+                source: WslShellSource::Passwd,
+            };
+            let mut cmd = CommandBuilder::new("wsl.exe");
+            apply_wsl_base_args(&mut cmd, "Ubuntu", DEFAULT_WSL_CWD, &shell.path);
+            apply_wsl_shell_behavior(
+                &mut cmd,
+                &shell,
+                WslIntegration::Bash {
+                    rcfile: "/home/me/.cache/terax/shell-integration/bash/bashrc".into(),
+                },
+            );
+
+            assert_eq!(
+                argv(&cmd),
+                vec![
+                    "wsl.exe",
+                    "-d",
+                    "Ubuntu",
+                    "--cd",
+                    "~",
+                    "--exec",
+                    "/bin/bash",
+                    "--rcfile",
+                    "/home/me/.cache/terax/shell-integration/bash/bashrc",
+                    "-i",
+                ]
+            );
+        }
+
+        #[test]
+        fn wsl_fish_launch_uses_init_command() {
+            let shell = WslShellResolution {
+                path: "/usr/bin/fish".into(),
+                source: WslShellSource::Passwd,
+            };
+            let mut cmd = CommandBuilder::new("wsl.exe");
+            apply_wsl_base_args(&mut cmd, "Ubuntu", "/work", &shell.path);
+            apply_wsl_shell_behavior(
+                &mut cmd,
+                &shell,
+                WslIntegration::Fish {
+                    init: "/home/me/.cache/terax/shell-integration/fish/init.fish".into(),
+                },
+            );
+
+            assert_eq!(
+                argv(&cmd),
+                vec![
+                    "wsl.exe",
+                    "-d",
+                    "Ubuntu",
+                    "--cd",
+                    "/work",
+                    "--exec",
+                    "/usr/bin/fish",
+                    "--init-command",
+                    "source '/home/me/.cache/terax/shell-integration/fish/init.fish'",
+                    "-i",
+                ]
+            );
+        }
+
+        #[test]
+        fn unsupported_wsl_shell_stays_usable_without_integration() {
+            let shell = WslShellResolution {
+                path: "/usr/bin/tcsh".into(),
+                source: WslShellSource::Passwd,
+            };
+            let mut cmd = CommandBuilder::new("wsl.exe");
+            apply_wsl_base_args(&mut cmd, "Ubuntu", "/work", &shell.path);
+            apply_wsl_shell_behavior(&mut cmd, &shell, WslIntegration::None);
+
+            assert_eq!(
+                argv(&cmd),
+                vec![
+                    "wsl.exe",
+                    "-d",
+                    "Ubuntu",
+                    "--cd",
+                    "/work",
+                    "--exec",
+                    "/usr/bin/tcsh",
+                ]
+            );
+        }
+
+        #[test]
+        fn fallback_shell_stays_interactive_without_rcfile() {
+            let shell = WslShellResolution {
+                path: "/bin/bash".into(),
+                source: WslShellSource::Fallback,
+            };
+            let mut cmd = CommandBuilder::new("wsl.exe");
+            apply_wsl_base_args(&mut cmd, "Ubuntu", "/work", &shell.path);
+            apply_wsl_shell_behavior(&mut cmd, &shell, WslIntegration::None);
+
+            assert_eq!(
+                argv(&cmd),
+                vec![
+                    "wsl.exe",
+                    "-d",
+                    "Ubuntu",
+                    "--cd",
+                    "/work",
+                    "--exec",
+                    "/bin/bash",
+                    "-i",
+                ]
+            );
+        }
     }
 }
 
