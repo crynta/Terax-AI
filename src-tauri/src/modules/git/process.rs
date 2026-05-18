@@ -37,6 +37,10 @@ fn availability_cell() -> &'static Mutex<HashMap<String, AvailabilityCache>> {
     GIT_AVAILABILITY.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
+fn prune_expired_availability_entries(cache: &mut HashMap<String, AvailabilityCache>) {
+    cache.retain(|_, entry| entry.checked_at.elapsed() < AVAILABILITY_TTL);
+}
+
 fn workspace_cache_key(workspace: &WorkspaceEnv) -> String {
     match workspace {
         WorkspaceEnv::Local => "local".into(),
@@ -47,9 +51,10 @@ fn workspace_cache_key(workspace: &WorkspaceEnv) -> String {
 pub fn ensure_git_available(workspace: &WorkspaceEnv) -> Result<()> {
     let cache_key = workspace_cache_key(workspace);
     let cached = {
-        let guard = availability_cell()
+        let mut guard = availability_cell()
             .lock()
             .expect("git availability poisoned");
+        prune_expired_availability_entries(&mut guard);
         guard
             .get(&cache_key)
             .filter(|entry| entry.checked_at.elapsed() < AVAILABILITY_TTL)
@@ -62,6 +67,7 @@ pub fn ensure_git_available(workspace: &WorkspaceEnv) -> Result<()> {
             let mut guard = availability_cell()
                 .lock()
                 .expect("git availability poisoned");
+            prune_expired_availability_entries(&mut guard);
             guard.insert(
                 cache_key,
                 AvailabilityCache {
@@ -293,9 +299,9 @@ where
     })
 }
 
-fn build_git_command(workspace: &WorkspaceEnv, cwd: Option<&str>, args: &[OsString]) -> Command {
+fn build_git_command(_workspace: &WorkspaceEnv, cwd: Option<&str>, args: &[OsString]) -> Command {
     #[cfg(windows)]
-    if let WorkspaceEnv::Wsl { distro } = workspace {
+    if let WorkspaceEnv::Wsl { distro } = _workspace {
         let mut cmd = Command::new("wsl.exe");
         cmd.arg("-d").arg(distro);
         if let Some(cwd) = cwd.filter(|s| !s.is_empty()) {
@@ -391,9 +397,18 @@ fn drain<R: Read>(reader: &mut R, prealloc: usize) -> (Vec<u8>, bool) {
 
 #[cfg(test)]
 mod tests {
-    use super::{build_git_command, parse_git_version, version_meets_minimum};
+    #[cfg(windows)]
+    use super::build_git_command;
+    use super::{
+        parse_git_version, prune_expired_availability_entries, version_meets_minimum, Availability,
+        AvailabilityCache, AVAILABILITY_TTL,
+    };
+    #[cfg(windows)]
     use crate::modules::workspace::WorkspaceEnv;
+    use std::collections::HashMap;
+    #[cfg(windows)]
     use std::ffi::OsString;
+    use std::time::{Duration, Instant};
 
     #[test]
     fn extracts_simple_version() {
@@ -421,6 +436,31 @@ mod tests {
         // patch component must not regress the comparison
         assert!(version_meets_minimum("2.23.5", "2.23.4"));
         assert!(!version_meets_minimum("2.23.3", "2.23.4"));
+    }
+
+    #[test]
+    fn prunes_expired_workspace_availability_entries() {
+        let mut cache = HashMap::from([
+            (
+                "local".to_string(),
+                AvailabilityCache {
+                    value: Availability::Ok,
+                    checked_at: Instant::now(),
+                },
+            ),
+            (
+                "wsl:Ubuntu".to_string(),
+                AvailabilityCache {
+                    value: Availability::NotInstalled,
+                    checked_at: Instant::now() - AVAILABILITY_TTL - Duration::from_secs(1),
+                },
+            ),
+        ]);
+
+        prune_expired_availability_entries(&mut cache);
+
+        assert!(cache.contains_key("local"));
+        assert!(!cache.contains_key("wsl:Ubuntu"));
     }
 
     #[cfg(windows)]

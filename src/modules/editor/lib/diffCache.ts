@@ -2,16 +2,11 @@ import {
   native,
   type GitDiffContentResult,
 } from "@/modules/ai/lib/native";
-import { currentWorkspaceEnv } from "@/modules/workspace";
+import { currentWorkspaceScopeKey } from "@/modules/workspace";
 
 const DIFF_CACHE_LIMIT = 6;
 const inflight = new Map<string, Promise<GitDiffContentResult>>();
 const cache = new Map<string, GitDiffContentResult>();
-
-function workspaceScopeKey(): string {
-  const env = currentWorkspaceEnv();
-  return env.kind === "wsl" ? `wsl:${env.distro}` : "local";
-}
 
 function touch(key: string, value: GitDiffContentResult) {
   cache.delete(key);
@@ -37,7 +32,7 @@ export function invalidateDiff(key: string): void {
 }
 
 export function invalidateRepoDiffs(repoRoot: string): void {
-  const prefix = `${workspaceScopeKey()}|${repoRoot}|`;
+  const prefix = `${currentWorkspaceScopeKey()}|${repoRoot}|`;
   for (const k of [...cache.keys()]) {
     if (k.startsWith(prefix)) cache.delete(k);
   }
@@ -48,7 +43,7 @@ export function workingDiffKey(
   path: string,
   mode: "-" | "+",
 ): string {
-  return `${workspaceScopeKey()}|${repoRoot}|w|${mode}|${path}`;
+  return `${currentWorkspaceScopeKey()}|${repoRoot}|w|${mode}|${path}`;
 }
 
 export function commitDiffKey(
@@ -56,7 +51,7 @@ export function commitDiffKey(
   sha: string,
   path: string,
 ): string {
-  return `${workspaceScopeKey()}|${repoRoot}|c|${sha}|${path}`;
+  return `${currentWorkspaceScopeKey()}|${repoRoot}|c|${sha}|${path}`;
 }
 
 export async function fetchWorkingDiff(

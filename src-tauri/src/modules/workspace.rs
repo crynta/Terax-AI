@@ -354,6 +354,26 @@ mod tests {
     }
 
     #[test]
+    fn resolve_path_keeps_local_paths_unchanged() {
+        let path = r"C:\Users\vinicios\repo";
+        assert_eq!(
+            resolve_path(path, &WorkspaceEnv::Local),
+            PathBuf::from(path)
+        );
+    }
+
+    #[test]
+    fn resolve_path_maps_wsl_paths_to_unc() {
+        let workspace = WorkspaceEnv::Wsl {
+            distro: "Ubuntu".into(),
+        };
+        assert_eq!(
+            resolve_path("/home/vinicios/repo", &workspace),
+            wsl_path_to_unc("Ubuntu", "/home/vinicios/repo")
+        );
+    }
+
+    #[test]
     fn normalize_wsl_value_uses_last_nonempty_line() {
         assert_eq!(
             normalize_wsl_value("banner\n  /bin/zsh \n".into(), "/bin/sh"),

@@ -3,7 +3,7 @@ import {
   type GitRepoInfo,
   type GitStatusSnapshot,
 } from "@/modules/ai/lib/native";
-import { useWorkspaceEnvStore } from "@/modules/workspace";
+import { useWorkspaceEnvStore, workspaceScopeKey } from "@/modules/workspace";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 const AUTO_FETCH_THROTTLE_MS = 5 * 60_000;
@@ -147,8 +147,7 @@ export function useSourceControl(
   enabled: boolean = true,
 ): SourceControlSummary {
   const workspaceEnv = useWorkspaceEnvStore((s) => s.env);
-  const workspaceKey =
-    workspaceEnv.kind === "wsl" ? `wsl:${workspaceEnv.distro}` : "local";
+  const workspaceKey = workspaceScopeKey(workspaceEnv);
   const [state, setState] = useState<SourceControlSummaryState>({
     repo: null,
     status: null,
