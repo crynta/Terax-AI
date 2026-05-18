@@ -104,3 +104,59 @@ export async function getAllKeys(): Promise<ProviderKeys> {
 export function hasAnyKey(keys: ProviderKeys): boolean {
   return PROVIDERS.some((p) => providerSupportsKey(p.id) && !!keys[p.id]);
 }
+
+export async function getCustomEndpointKey(epId: string): Promise<string | null> {
+  try {
+    const v = await invoke<string | null>("secrets_get", {
+      service: KEYRING_SERVICE,
+      account: `custom-ep:${epId}`,
+    });
+    return v && v.length > 0 ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function getAllCustomEndpointKeys(
+  endpoints: { id: string }[],
+): Promise<Record<string, string | null>> {
+  if (endpoints.length === 0) return {};
+  try {
+    const accounts = endpoints.map((e) => `custom-ep:${e.id}`);
+    const results = await invoke<(string | null)[]>("secrets_get_all", {
+      service: KEYRING_SERVICE,
+      accounts,
+    });
+    const out: Record<string, string | null> = {};
+    endpoints.forEach((e, i) => {
+      const v = results[i];
+      out[e.id] = v && v.length > 0 ? v : null;
+    });
+    return out;
+  } catch {
+    const out: Record<string, string | null> = {};
+    for (const e of endpoints) {
+      out[e.id] = await getCustomEndpointKey(e.id);
+    }
+    return out;
+  }
+}
+
+export async function setCustomEndpointKey(epId: string, key: string): Promise<void> {
+  const trimmed = key.trim();
+  if (!trimmed) throw new Error("API key is empty");
+  await invoke("secrets_set", {
+    service: KEYRING_SERVICE,
+    account: `custom-ep:${epId}`,
+    password: trimmed,
+  });
+}
+
+export async function clearCustomEndpointKey(epId: string): Promise<void> {
+  try {
+    await invoke("secrets_delete", {
+      service: KEYRING_SERVICE,
+      account: `custom-ep:${epId}`,
+    });
+  } catch {}
+}

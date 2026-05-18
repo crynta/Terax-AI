@@ -112,6 +112,9 @@ type StoreState = {
   setApiKeys: (keys: ProviderKeys) => void;
   setApiKey: (provider: ProviderId, key: string | null) => void;
 
+  customEndpointKeys: Record<string, string | null>;
+  setCustomEndpointKeys: (keys: Record<string, string | null>) => void;
+
   selectedModelId: ModelId | string;
   setSelectedModelId: (id: ModelId | string) => void;
 
@@ -262,6 +265,7 @@ function makeChat(sessionId: string): Chat<UIMessage> {
     getRemoteModelOverride: () => useChatStore.getState().remoteModelOverride,
     getOpenaiCompatibleContextWindow: () => usePreferencesStore.getState().openaiCompatibleContextWindow,
     getCustomEndpoints: () => usePreferencesStore.getState().customEndpoints,
+    getCustomEndpointKeys: () => useChatStore.getState().customEndpointKeys,
     onStep: (step) => {
       useChatStore.getState().patchAgentMeta({ step });
     },
@@ -320,6 +324,9 @@ export const useChatStore = create<StoreState>((set, get) => ({
   setApiKey: (provider, key) => {
     set({ apiKeys: { ...get().apiKeys, [provider]: key } });
   },
+
+  customEndpointKeys: {},
+  setCustomEndpointKeys: (keys) => set({ customEndpointKeys: keys }),
 
   selectedModelId: DEFAULT_MODEL_ID,
   setSelectedModelId: (id) => {

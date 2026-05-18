@@ -57,6 +57,7 @@ type Deps = {
   getRemoteModelOverride?: () => string | null;
   getOpenaiCompatibleContextWindow?: () => number | undefined;
   getCustomEndpoints?: () => CustomEndpoint[];
+  getCustomEndpointKeys?: () => Record<string, string | null>;
   onStep?: (step: string | null) => void;
   onUsage?: (delta: AgentUsageDelta) => void;
   onCompact?: (info: { droppedCount: number }) => void;
@@ -98,6 +99,7 @@ export function createContextAwareTransport(deps: Deps) {
       remoteModelOverride: deps.getRemoteModelOverride?.() ?? null,
       openaiCompatibleContextWindow: deps.getOpenaiCompatibleContextWindow?.(),
       customEndpoints: deps.getCustomEndpoints?.(),
+      customEndpointKeys: deps.getCustomEndpointKeys?.(),
       planMode: deps.getPlanMode?.(),
       projectMemory,
       uiMessages: messagesForRun,

@@ -21,6 +21,7 @@ import {
   AiInputBarConnect,
   AiMiniWindow,
   getAllKeys,
+  getAllCustomEndpointKeys,
   hasAnyKey,
   SelectionAskAi,
   useChatStore,
@@ -363,6 +364,7 @@ export default function App() {
   const panelOpen = useChatStore((s) => s.panelOpen);
   const apiKeys = useChatStore((s) => s.apiKeys);
   const setApiKeys = useChatStore((s) => s.setApiKeys);
+  const setCustomEndpointKeys = useChatStore((s) => s.setCustomEndpointKeys);
   const setSelectedModelId = useChatStore((s) => s.setSelectedModelId);
   const setLive = useChatStore((s) => s.setLive);
   const respondToApproval = useChatStore((s) => s.respondToApproval);
@@ -388,6 +390,12 @@ export default function App() {
         if (!alive) return;
         setApiKeys(keys);
         setKeysLoaded(true);
+      });
+      void getAllCustomEndpointKeys(
+        usePreferencesStore.getState().customEndpoints,
+      ).then((epKeys) => {
+        if (!alive) return;
+        setCustomEndpointKeys(epKeys);
       });
     };
     reload();

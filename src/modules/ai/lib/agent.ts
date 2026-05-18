@@ -71,6 +71,7 @@ export type BuildModelOptions = {
   zhipuBaseURL?: string;
   huggingfaceEndpointBaseURL?: string;
   customEndpoints?: CustomEndpoint[];
+  customEndpointKeys?: Record<string, string | null>;
 };
 
 const modelCache = new Map<string, LanguageModel>();
@@ -99,7 +100,7 @@ export async function buildLanguageModel(
     const epId = resolvedModelId.slice(CUSTOM_ENDPOINT_PREFIX.length);
     const ep = options.customEndpoints.find((e) => e.id === epId);
     if (!ep) throw new Error(`Custom endpoint not found: ${epId}`);
-    const epKey = keys["openai-compatible"] ?? "";
+    const epKey = options.customEndpointKeys?.[epId] ?? keys["openai-compatible"] ?? "";
     const cacheKey = `custom ${ep.id} ${ep.baseURL} ${ep.modelId} ${epKey}`;
     const hit = modelCache.get(cacheKey);
     if (hit) return hit;
@@ -432,11 +433,13 @@ export function buildConfiguredLanguageModel(
   huggingfaceEndpointBaseURL?: string,
   remoteModelOverride?: string | null,
   customEndpoints?: CustomEndpoint[],
+  customEndpointKeys?: Record<string, string | null>,
 ): Promise<LanguageModel> {
   if (isCustomEndpointModelId(modelId)) {
     return buildLanguageModel("openai-compatible", keys, modelId, {
       openaiCompatibleBaseURL,
       customEndpoints,
+      customEndpointKeys,
     });
   }
   const m = getModel(modelId);
@@ -549,6 +552,7 @@ export type RunAgentOptions = {
   remoteModelOverride?: string | null;
   openaiCompatibleContextWindow?: number;
   customEndpoints?: CustomEndpoint[];
+  customEndpointKeys?: Record<string, string | null>;
   planMode?: boolean;
   projectMemory?: string | null;
   uiMessages: UIMessage[];
@@ -569,6 +573,7 @@ export async function runAgentStream(opts: RunAgentOptions) {
     opts.huggingfaceEndpointBaseURL,
     opts.remoteModelOverride,
     opts.customEndpoints,
+    opts.customEndpointKeys,
   );
   const provider = getModel(modelId).provider;
 

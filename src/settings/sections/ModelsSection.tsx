@@ -19,7 +19,7 @@ import {
   type ModelId,
   type ProviderId,
 } from "@/modules/ai/config";
-import { clearKey, getAllKeys, setKey } from "@/modules/ai/lib/keyring";
+import { clearKey, getAllKeys, getCustomEndpointKey, setCustomEndpointKey, clearCustomEndpointKey, setKey } from "@/modules/ai/lib/keyring";
 import { fetchCustomEndpointModels, type RemoteModel } from "@/modules/ai/lib/fetchModels";
 import { usePreferencesStore } from "@/modules/settings/preferences";
 import {
@@ -348,6 +348,18 @@ function CustomEndpointsBlock({
   const [showForm, setShowForm] = useState(false);
   const [fetchedModels, setFetchedModels] = useState<Map<string, RemoteModel[]>>(new Map());
   const [fetchingEp, setFetchingEp] = useState<Set<string>>(new Set());
+  const [epKeys, setEpKeys] = useState<Record<string, string | null>>({});
+  const [epKeyDrafts, setEpKeyDrafts] = useState<Record<string, string>>(({}));
+
+  useEffect(() => {
+    void (async () => {
+      const map: Record<string, string | null> = {};
+      for (const ep of endpoints) {
+        map[ep.id] = await getCustomEndpointKey(ep.id);
+      }
+      setEpKeys(map);
+    })();
+  }, [endpoints]);
 
   const resetForm = () => {
     setForm({ name: "", baseURL: "", modelId: "", contextWindow: "128000" });
@@ -534,6 +546,56 @@ function CustomEndpointsBlock({
                     ))}
                   </div>
                 )}
+                <div className="flex items-center gap-2">
+                  <span className="w-10 shrink-0 text-[10px] text-muted-foreground">Key</span>
+                  {epKeys[ep.id] ? (
+                    <div className="flex flex-1 items-center gap-1.5">
+                      <code className="flex-1 truncate rounded bg-muted/40 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+                        {`${epKeys[ep.id]!.slice(0, 4)}${"•".repeat(6)}${epKeys[ep.id]!.slice(-4)}`}
+                      </code>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={async () => {
+                          await clearCustomEndpointKey(ep.id);
+                          setEpKeys((prev) => ({ ...prev, [ep.id]: null }));
+                        }}
+                        className="size-5 text-muted-foreground hover:text-destructive"
+                      >
+                        <HugeiconsIcon icon={Cancel01Icon} size={10} strokeWidth={1.75} />
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="flex flex-1 gap-1.5">
+                      <Input
+                        type="password"
+                        value={epKeyDrafts[ep.id] ?? ""}
+                        onChange={(e) => setEpKeyDrafts((prev) => ({ ...prev, [ep.id]: e.target.value }))}
+                        placeholder="Endpoint API key"
+                        spellCheck={false}
+                        className="h-6 flex-1 font-mono text-[10.5px]"
+                      />
+                      <Button
+                        size="sm"
+                        onClick={async () => {
+                          const v = (epKeyDrafts[ep.id] ?? "").trim();
+                          if (!v) return;
+                          await setCustomEndpointKey(ep.id, v);
+                          setEpKeys((prev) => ({ ...prev, [ep.id]: v }));
+                          setEpKeyDrafts((prev) => {
+                            const next = { ...prev };
+                            delete next[ep.id];
+                            return next;
+                          });
+                        }}
+                        disabled={!(epKeyDrafts[ep.id] ?? "").trim()}
+                        className="h-6 px-2 text-[10px]"
+                      >
+                        Save
+                      </Button>
+                    </div>
+                  )}
+                </div>
               </div>
             );
           })}
