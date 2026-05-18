@@ -335,6 +335,54 @@ pub async fn wsl_default_distro() -> Result<Option<String>, String> {
 }
 
 #[tauri::command]
+pub fn workspace_authorize(workspace: WorkspaceEnv) -> Result<bool, String> {
+    match workspace {
+        WorkspaceEnv::Local => Ok(true),
+        WorkspaceEnv::Wsl { distro } => {
+            wsl_home(distro)?;
+            Ok(true)
+        }
+        WorkspaceEnv::Ssh {
+            host,
+            user,
+            port,
+            key_path,
+            password,
+        } => ssh_test_connection(host, user, port, key_path, password),
+    }
+}
+
+#[tauri::command]
+pub fn workspace_current_dir(workspace: WorkspaceEnv) -> Result<String, String> {
+    match workspace {
+        WorkspaceEnv::Local => {
+            std::env::current_dir()
+                .map(|p| p.to_string_lossy().to_string())
+                .map_err(|e| e.to_string())
+        }
+        WorkspaceEnv::Wsl { distro } => wsl_home(distro),
+        WorkspaceEnv::Ssh { host, user, .. } => {
+            let mut target = String::new();
+            if let Some(u) = user {
+                target.push_str(&u);
+                target.push('@');
+            }
+            target.push_str(&host);
+            let out = std::process::Command::new("ssh")
+                .arg(&target)
+                .arg("pwd")
+                .output()
+                .map_err(|e| format!("SSH failed: {e}"))?;
+            if out.status.success() {
+                Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
+            } else {
+                Err(String::from_utf8_lossy(&out.stderr).trim().to_string())
+            }
+        }
+    }
+}
+
+#[tauri::command]
 pub fn wsl_home(distro: String) -> Result<String, String> {
     #[cfg(not(windows))]
     {

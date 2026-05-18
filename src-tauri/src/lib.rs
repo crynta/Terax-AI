@@ -116,6 +116,8 @@ pub fn run() {
             workspace::wsl_home,
             workspace::wsl_unregister_distro,
             workspace::ssh_test_connection,
+            workspace::workspace_authorize,
+            workspace::workspace_current_dir,
             pty::shell_init::list_available_shells,
             open_settings_window,
             secrets::secrets_get,
