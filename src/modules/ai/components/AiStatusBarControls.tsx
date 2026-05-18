@@ -259,6 +259,7 @@ function ModelDropdown() {
     return getModel(selected);
   }, [selected, customEndpoints]);
   const [search, setSearch] = useState("");
+  const [remoteSearch, setRemoteSearch] = useState("");
   const [activeProvider, setActiveProvider] = useState<ProviderId | null>(null);
   const [tab, setTab] = useState<Tab>("all");
   const [remoteModels, setRemoteModels] = useState<Map<ProviderId, RemoteModel[]>>(new Map());
@@ -345,13 +346,16 @@ function ModelDropdown() {
     const models = remoteModels.get(activeProvider);
     if (!models) return [];
     const q = search.trim().toLowerCase();
+    const rq = remoteSearch.trim().toLowerCase();
     const staticIds = new Set<string>(
       allModels.filter((m) => m.provider === activeProvider).map((m) => m.id),
     );
     const deduped = models.filter((m) => !staticIds.has(m.id));
-    if (!q) return deduped;
-    return deduped.filter((m) => m.id.toLowerCase().includes(q));
-  }, [activeProvider, allModels, remoteModels, search]);
+    let result = deduped;
+    if (q) result = result.filter((m) => m.id.toLowerCase().includes(q));
+    if (rq) result = result.filter((m) => m.id.toLowerCase().includes(rq));
+    return result;
+  }, [activeProvider, allModels, remoteModels, search, remoteSearch]);
 
   return (
     <DropdownMenu>
@@ -440,7 +444,7 @@ function ModelDropdown() {
               icon={AiBookIcon}
               title="All providers"
               active={activeProvider === null}
-              onClick={() => setActiveProvider(null)}
+              onClick={() => { setActiveProvider(null); setRemoteSearch(""); }}
             />
             {sortedProviders.configured.map((p) => (
               <ProviderPill
@@ -448,7 +452,7 @@ function ModelDropdown() {
                 icon={PROVIDER_ICON[p.id]}
                 title={p.label}
                 active={activeProvider === p.id}
-                onClick={() => setActiveProvider(p.id)}
+                onClick={() => { setActiveProvider(p.id); setRemoteSearch(""); }}
               />
             ))}
           </div>
@@ -495,11 +499,21 @@ function ModelDropdown() {
                     onToggleFavorite={() => void toggleFavoriteModel(m.id)}
                   />
                 ))}
-                {remoteFiltered.length > 0 ? (
+                {remoteModels.get(activeProvider!)?.length ? (
                   <>
                     <div className="mx-3 my-1 border-t border-border/40" />
-                    <div className="px-3 pb-1 pt-0.5 text-[10px] text-muted-foreground/50">
-                      Remote models ({remoteFiltered.length})
+                    <div className="flex items-center gap-1.5 px-3 pb-1 pt-0.5">
+                      <span className="text-[10px] text-muted-foreground/50">
+                        Remote models ({remoteFiltered.length})
+                      </span>
+                      <input
+                        type="text"
+                        value={remoteSearch}
+                        onChange={(e) => setRemoteSearch(e.target.value)}
+                        placeholder="Filter..."
+                        spellCheck={false}
+                        className="ml-auto h-4 w-24 rounded bg-transparent px-1.5 text-[10px] text-foreground/70 placeholder:text-muted-foreground/40 outline-none ring-1 ring-border/30 focus:ring-border/60"
+                      />
                     </div>
                     {remoteFiltered.map((rm) => (
                       <RemoteModelRow
