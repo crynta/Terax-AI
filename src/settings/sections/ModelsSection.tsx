@@ -117,11 +117,7 @@ export function ModelsSection() {
 
       <LocalModelsBlock />
 
-      <CustomEndpointsBlock
-        compatKey={keys["openai-compatible"]}
-        onSaveKey={(v) => onSave("openai-compatible", v)}
-        onClearKey={() => onClear("openai-compatible")}
-      />
+      <CustomEndpointsBlock />
 
       <AutocompleteBlock keys={keys} />
     </div>
@@ -331,17 +327,8 @@ function LocalModelsBlock() {
   );
 }
 
-function CustomEndpointsBlock({
-  compatKey,
-  onSaveKey,
-  onClearKey,
-}: {
-  compatKey: string | null;
-  onSaveKey: (v: string) => Promise<void>;
-  onClearKey: () => Promise<void>;
-}) {
+function CustomEndpointsBlock() {
   const endpoints = usePreferencesStore((s) => s.customEndpoints);
-  const [keyDraft, setKeyDraft] = useState("");
   const [editing, setEditing] = useState<CustomEndpoint | null>(null);
   const [form, setForm] = useState({ name: "", baseURL: "", modelId: "", contextWindow: "128000" });
   const [testStatus, setTestStatus] = useState<"idle" | "testing" | "ok" | "fail">("idle");
@@ -423,7 +410,7 @@ function CustomEndpointsBlock({
   const fetchModels = async (ep: CustomEndpoint) => {
     setFetchingEp((prev) => new Set(prev).add(ep.id));
     try {
-      const result = await fetchCustomEndpointModels(ep.baseURL, compatKey);
+      const result = await fetchCustomEndpointModels(ep.baseURL, epKeys[ep.id]);
       if (result.models.length > 0) {
         setFetchedModels((prev) => new Map(prev).set(ep.id, result.models));
       } else {
@@ -547,7 +534,7 @@ function CustomEndpointsBlock({
                   </div>
                 )}
                 <div className="flex items-center gap-2">
-                  <span className="w-10 shrink-0 text-[10px] text-muted-foreground">Key</span>
+                  <span className="w-7 shrink-0 text-[10px] text-muted-foreground">Key</span>
                   {epKeys[ep.id] ? (
                     <div className="flex flex-1 items-center gap-1.5">
                       <code className="flex-1 truncate rounded bg-muted/40 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
@@ -558,6 +545,7 @@ function CustomEndpointsBlock({
                         variant="ghost"
                         onClick={async () => {
                           await clearCustomEndpointKey(ep.id);
+                          await emitKeysChanged();
                           setEpKeys((prev) => ({ ...prev, [ep.id]: null }));
                         }}
                         className="size-5 text-muted-foreground hover:text-destructive"
@@ -571,7 +559,7 @@ function CustomEndpointsBlock({
                         type="password"
                         value={epKeyDrafts[ep.id] ?? ""}
                         onChange={(e) => setEpKeyDrafts((prev) => ({ ...prev, [ep.id]: e.target.value }))}
-                        placeholder="Endpoint API key"
+                        placeholder="Optional — leave empty for unauthenticated"
                         spellCheck={false}
                         className="h-6 flex-1 font-mono text-[10.5px]"
                       />
@@ -581,6 +569,7 @@ function CustomEndpointsBlock({
                           const v = (epKeyDrafts[ep.id] ?? "").trim();
                           if (!v) return;
                           await setCustomEndpointKey(ep.id, v);
+                          await emitKeysChanged();
                           setEpKeys((prev) => ({ ...prev, [ep.id]: v }));
                           setEpKeyDrafts((prev) => {
                             const next = { ...prev };
@@ -659,49 +648,6 @@ function CustomEndpointsBlock({
               spellCheck={false}
               className="h-8 w-28 font-mono text-[11.5px]"
             />
-          </FieldRow>
-
-          <FieldRow label="API key">
-            {compatKey ? (
-              <div className="flex flex-1 items-center gap-1.5">
-                <code className="flex-1 truncate rounded bg-muted/40 px-2 py-1 font-mono text-[11px] text-muted-foreground">
-                  {`${compatKey.slice(0, 4)}${"•".repeat(8)}${compatKey.slice(-4)}`}
-                </code>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  onClick={() => void onClearKey()}
-                  title="Remove"
-                  className="size-7 text-muted-foreground hover:text-destructive"
-                >
-                  <HugeiconsIcon icon={Cancel01Icon} size={12} strokeWidth={1.75} />
-                </Button>
-              </div>
-            ) : (
-              <div className="flex flex-1 gap-1.5">
-                <Input
-                  type="password"
-                  value={keyDraft}
-                  onChange={(e) => setKeyDraft(e.target.value)}
-                  placeholder="Optional — leave empty for unauthenticated"
-                  spellCheck={false}
-                  className="h-8 flex-1 font-mono text-[11.5px]"
-                />
-                <Button
-                  size="sm"
-                  onClick={async () => {
-                    const v = keyDraft.trim();
-                    if (!v) return;
-                    await onSaveKey(v);
-                    setKeyDraft("");
-                  }}
-                  disabled={!keyDraft.trim()}
-                  className="h-8 px-3 text-[11px]"
-                >
-                  Save
-                </Button>
-              </div>
-            )}
           </FieldRow>
 
           <StatusLine status={testStatus} />
