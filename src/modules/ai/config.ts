@@ -1125,7 +1125,34 @@ export const MODELS = [
 
 export type ModelId = (typeof MODELS)[number]["id"];
 
-export function getModel(id: ModelId): ModelInfo {
+export const CUSTOM_ENDPOINT_PREFIX = "custom:";
+
+export function customEndpointModelId(epId: string): string {
+  return `${CUSTOM_ENDPOINT_PREFIX}${epId}`;
+}
+
+export function isCustomEndpointModelId(modelId: string): boolean {
+  return modelId.startsWith(CUSTOM_ENDPOINT_PREFIX);
+}
+
+export function customEndpointIdFromModel(modelId: string): string {
+  return modelId.slice(CUSTOM_ENDPOINT_PREFIX.length);
+}
+
+export function customEndpointToModelInfo(
+  ep: import("@/modules/settings/store").CustomEndpoint,
+): ModelInfo {
+  return {
+    id: customEndpointModelId(ep.id),
+    provider: "openai-compatible" as ProviderId,
+    label: ep.name,
+    hint: "Custom",
+    description: `${ep.modelId} @ ${ep.baseURL}`,
+    capabilities: { intelligence: 3, speed: 3, cost: 3 },
+  };
+}
+
+export function getModel(id: ModelId | string): ModelInfo {
   const m = MODELS.find((x) => x.id === id);
   if (m) return m;
   const fallback = MODELS.find((x) => x.id === DEFAULT_MODEL_ID);
@@ -1221,8 +1248,16 @@ export const MODEL_CONTEXT_LIMITS: Record<string, number> = {
   "lmstudio-local": 32_000,
 };
 
-export function getModelContextLimit(modelId: string | undefined): number {
+export function getModelContextLimit(
+  modelId: string | undefined,
+  customEndpoints?: { id: string; contextWindow: number }[],
+): number {
   if (!modelId) return 128_000;
+  if (isCustomEndpointModelId(modelId) && customEndpoints) {
+    const epId = customEndpointIdFromModel(modelId);
+    const ep = customEndpoints.find((e) => e.id === epId);
+    return ep?.contextWindow ?? 128_000;
+  }
   return MODEL_CONTEXT_LIMITS[modelId] ?? 128_000;
 }
 

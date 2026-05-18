@@ -41,6 +41,14 @@ export const EDITOR_THEME_LABELS: Record<EditorThemeId, string> = {
   "xcode-light": "Xcode Light",
 };
 
+export type CustomEndpoint = {
+  id: string;
+  name: string;
+  baseURL: string;
+  modelId: string;
+  contextWindow: number;
+};
+
 export type Preferences = {
   theme: ThemePref;
   defaultModelId: ModelId;
@@ -59,6 +67,7 @@ export type Preferences = {
   ollamaBaseURL: string;
   zhipuBaseURL: string;
   huggingfaceEndpointBaseURL: string;
+  customEndpoints: CustomEndpoint[];
   favoriteModelIds: string[];
   recentModelIds: string[];
   vimMode: boolean;
@@ -89,6 +98,7 @@ const KEY_OPENAI_COMPAT_CONTEXT_WINDOW = "openaiCompatibleContextWindow";
 const KEY_OLLAMA_BASE_URL = "ollamaBaseURL";
 const KEY_ZHIPU_BASE_URL = "zhipuBaseURL";
 const KEY_HF_ENDPOINT_BASE_URL = "huggingfaceEndpointBaseURL";
+const KEY_CUSTOM_ENDPOINTS = "customEndpoints";
 const KEY_FAVORITE_MODELS = "favoriteModelIds";
 const KEY_RECENT_MODELS = "recentModelIds";
 const KEY_VIM_MODE = "vimMode";
@@ -134,6 +144,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   ollamaBaseURL: OLLAMA_DEFAULT_BASE_URL,
   zhipuBaseURL: ZHIPU_DEFAULT_BASE_URL,
   huggingfaceEndpointBaseURL: HUGGINGFACE_ENDPOINT_DEFAULT_BASE_URL,
+  customEndpoints: [],
   favoriteModelIds: [],
   recentModelIds: [],
   vimMode: false,
@@ -208,6 +219,9 @@ export async function loadPreferences(): Promise<Preferences> {
     huggingfaceEndpointBaseURL:
       get<string>(KEY_HF_ENDPOINT_BASE_URL) ??
       DEFAULT_PREFERENCES.huggingfaceEndpointBaseURL,
+    customEndpoints:
+      get<CustomEndpoint[]>(KEY_CUSTOM_ENDPOINTS) ??
+      DEFAULT_PREFERENCES.customEndpoints,
     favoriteModelIds:
       get<string[]>(KEY_FAVORITE_MODELS) ??
       DEFAULT_PREFERENCES.favoriteModelIds,
@@ -304,6 +318,10 @@ export async function setZhipuBaseURL(value: string): Promise<void> {
   await writePref(KEY_ZHIPU_BASE_URL, value);
 }
 
+export async function setCustomEndpoints(value: CustomEndpoint[]): Promise<void> {
+  await writePref(KEY_CUSTOM_ENDPOINTS, value);
+}
+
 export async function setFavoriteModelIds(value: string[]): Promise<void> {
   await writePref(KEY_FAVORITE_MODELS, value);
 }
@@ -390,6 +408,7 @@ export async function onPreferencesChange(
     [KEY_OLLAMA_BASE_URL]: "ollamaBaseURL",
     [KEY_ZHIPU_BASE_URL]: "zhipuBaseURL",
     [KEY_HF_ENDPOINT_BASE_URL]: "huggingfaceEndpointBaseURL",
+    [KEY_CUSTOM_ENDPOINTS]: "customEndpoints",
     [KEY_FAVORITE_MODELS]: "favoriteModelIds",
     [KEY_RECENT_MODELS]: "recentModelIds",
     [KEY_VIM_MODE]: "vimMode",

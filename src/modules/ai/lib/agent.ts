@@ -7,6 +7,7 @@ import {
   type UIMessage,
 } from "ai";
 import {
+  CUSTOM_ENDPOINT_PREFIX,
   DEFAULT_MODEL_ID,
   getModel,
   getModelContextLimit,
@@ -15,11 +16,13 @@ import {
   MAX_AGENT_STEPS,
   OLLAMA_DEFAULT_BASE_URL,
   ZHIPU_DEFAULT_BASE_URL,
+  isCustomEndpointModelId,
   providerNeedsKey,
   selectSystemPrompt,
   type ModelId,
   type ProviderId,
 } from "../config";
+import type { CustomEndpoint } from "@/modules/settings/store";
 import { buildTools, type ToolContext } from "../tools/tools";
 import { compactModelMessagesDetailed } from "./compact";
 import type { ProviderKeys } from "./keyring";
@@ -67,6 +70,7 @@ export type BuildModelOptions = {
   ollamaBaseURL?: string;
   zhipuBaseURL?: string;
   huggingfaceEndpointBaseURL?: string;
+  customEndpoints?: CustomEndpoint[];
 };
 
 const modelCache = new Map<string, LanguageModel>();
@@ -90,6 +94,28 @@ export async function buildLanguageModel(
   const hfEndpointURL =
     options.huggingfaceEndpointBaseURL ??
     HUGGINGFACE_ENDPOINT_DEFAULT_BASE_URL;
+
+  if (isCustomEndpointModelId(resolvedModelId) && options.customEndpoints) {
+    const epId = resolvedModelId.slice(CUSTOM_ENDPOINT_PREFIX.length);
+    const ep = options.customEndpoints.find((e) => e.id === epId);
+    if (!ep) throw new Error(`Custom endpoint not found: ${epId}`);
+    const epKey = keys["openai-compatible"] ?? "";
+    const cacheKey = `custom ${ep.id} ${ep.baseURL} ${ep.modelId} ${epKey}`;
+    const hit = modelCache.get(cacheKey);
+    if (hit) return hit;
+    const { createOpenAICompatible } = await import(
+      "@ai-sdk/openai-compatible"
+    );
+    const built = createOpenAICompatible({
+      name: ep.name,
+      baseURL: ep.baseURL,
+      ...(epKey ? { apiKey: epKey } : {}),
+      fetch: localProxyFetch,
+    })(ep.modelId);
+    modelCache.set(cacheKey, built);
+    return built;
+  }
+
   const cacheKey = `${provider} ${key} ${resolvedModelId} ${lmstudioURL} ${compatURL} ${ollamaURL} ${zhipuURL} ${hfEndpointURL}`;
   const hit = modelCache.get(cacheKey);
   if (hit) return hit;
@@ -395,7 +421,7 @@ export async function buildLanguageModel(
 }
 
 export function buildConfiguredLanguageModel(
-  modelId: ModelId,
+  modelId: ModelId | string,
   keys: ProviderKeys,
   lmstudioBaseURL?: string,
   lmstudioModelId?: string,
@@ -405,7 +431,14 @@ export function buildConfiguredLanguageModel(
   zhipuBaseURL?: string,
   huggingfaceEndpointBaseURL?: string,
   remoteModelOverride?: string | null,
+  customEndpoints?: CustomEndpoint[],
 ): Promise<LanguageModel> {
+  if (isCustomEndpointModelId(modelId)) {
+    return buildLanguageModel("openai-compatible", keys, modelId, {
+      openaiCompatibleBaseURL,
+      customEndpoints,
+    });
+  }
   const m = getModel(modelId);
   let resolvedId: string = m.id;
   if (remoteModelOverride) {
@@ -438,7 +471,7 @@ const PLAN_MODE_PROMPT = `## PLAN MODE — ACTIVE
 Mutating tools (write_file, edit, multi_edit, create_directory) will queue their changes for the user to review as a single diff. Do NOT execute bash_run or bash_background while plan mode is active — restrict yourself to reads (read_file, grep, glob, list_directory) and the queued mutations. After queueing the full set of edits, stop and return a brief summary; do not continue acting until the user has accepted/rejected.`;
 
 function buildStableSystem(
-  modelId: ModelId,
+  modelId: ModelId | string,
   persona: { name: string; instructions: string } | null,
   customInstructions: string | undefined,
   projectMemory: string | null,
@@ -498,7 +531,7 @@ const EMPTY_USAGE: AgentUsage = {
 
 export type RunAgentOptions = {
   keys: ProviderKeys;
-  modelId?: ModelId;
+  modelId?: ModelId | string;
   customInstructions?: string;
   agentPersona?: { name: string; instructions: string } | null;
   toolContext: ToolContext;
@@ -515,6 +548,7 @@ export type RunAgentOptions = {
   huggingfaceEndpointBaseURL?: string;
   remoteModelOverride?: string | null;
   openaiCompatibleContextWindow?: number;
+  customEndpoints?: CustomEndpoint[];
   planMode?: boolean;
   projectMemory?: string | null;
   uiMessages: UIMessage[];
@@ -534,6 +568,7 @@ export async function runAgentStream(opts: RunAgentOptions) {
     opts.zhipuBaseURL,
     opts.huggingfaceEndpointBaseURL,
     opts.remoteModelOverride,
+    opts.customEndpoints,
   );
   const provider = getModel(modelId).provider;
 
@@ -547,7 +582,7 @@ export async function runAgentStream(opts: RunAgentOptions) {
   const history = await convertToModelMessages(opts.uiMessages);
   const contextLimit = modelId === "openai-compatible-custom" && opts.openaiCompatibleContextWindow
     ? opts.openaiCompatibleContextWindow
-    : getModelContextLimit(getModel(modelId).id);
+    : getModelContextLimit(getModel(modelId).id, opts.customEndpoints);
   const compact = compactModelMessagesDetailed(
     history,
     contextLimit,

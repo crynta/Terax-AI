@@ -61,10 +61,9 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { motion } from "motion/react";
 import { useMemo, useRef, useState } from "react";
 import {
-  customEndpointModelId,
   customEndpointToModelInfo,
-  getModel,
   isCustomEndpointModelId,
+  getModel,
   MODELS,
   providerNeedsKey,
   PROVIDERS,
@@ -78,7 +77,6 @@ import { ACCEPTED_FILES, useComposer } from "../lib/composer";
 import { toggleFavoriteModel } from "../lib/modelPrefs";
 import { useChatStore } from "../store/chatStore";
 import { usePreferencesStore } from "@/modules/settings/preferences";
-import type { CustomEndpoint } from "@/modules/settings/store";
 
 const PROVIDER_ICON = {
   openai: ChatGptIcon,
@@ -253,7 +251,13 @@ function ModelDropdown() {
   const favoriteIds = usePreferencesStore((s) => s.favoriteModelIds);
   const recentIds = usePreferencesStore((s) => s.recentModelIds);
   const customEndpoints = usePreferencesStore((s) => s.customEndpoints);
-  const current = getModel(selected);
+  const current = useMemo(() => {
+    if (isCustomEndpointModelId(selected)) {
+      const ep = customEndpoints.find((e) => selected === `custom:${e.id}`);
+      if (ep) return customEndpointToModelInfo(ep);
+    }
+    return getModel(selected);
+  }, [selected, customEndpoints]);
   const [search, setSearch] = useState("");
   const [activeProvider, setActiveProvider] = useState<ProviderId | null>(null);
   const [tab, setTab] = useState<Tab>("all");

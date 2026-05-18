@@ -39,6 +39,100 @@ function getNumber(obj: unknown, key: string): number | undefined {
   return typeof val === "number" ? val : undefined;
 }
 
+export async function fetchCustomEndpointModels(
+  baseURL: string,
+  apiKey?: string | null,
+): Promise<FetchModelsResult> {
+  const clean = baseURL.replace(/\/+$/, "");
+  const url = `${clean}/models`;
+
+  try {
+    const headers: Record<string, string> = {
+      Accept: "application/json",
+    };
+
+    if (apiKey) {
+      headers["Authorization"] = `Bearer ${apiKey}`;
+    }
+
+    const res = await fetch(url, {
+      method: "GET",
+      headers,
+      signal: AbortSignal.timeout(10_000),
+    });
+
+    if (!res.ok) {
+      return { models: [], error: `/models returned ${res.status}` };
+    }
+
+    const json: unknown = await res.json();
+
+    const data: unknown[] = Array.isArray(json)
+      ? json
+      : Array.isArray((json as Record<string, unknown>)?.data)
+        ? ((json as Record<string, unknown>).data as unknown[])
+        : [];
+
+    const models: RemoteModel[] = data
+      .map((item): RemoteModel | null => {
+        if (typeof item !== "object" || item === null) return null;
+        const id = getString(item, "id");
+        if (typeof id !== "string") return null;
+
+        let ctx: number | null = getNumber(item, "context_length") ?? getNumber(item, "max_model_len") ?? null;
+        let supportsTools = getBool(item, "supports_tools") ?? false;
+        let supportsStructured = getBool(item, "supports_structured_output") ?? false;
+        let supportsReasoning = false;
+
+        const meta = (item as Record<string, unknown>)?.model_info ?? (item as Record<string, unknown>)?.metadata;
+        if (typeof meta === "object" && meta !== null) {
+          const mt = getBool(meta, "supports_tool_call");
+          if (mt) supportsTools = true;
+          const mr = getBool(meta, "supports_reasoning");
+          if (mr) supportsReasoning = true;
+          const mc = getNumber(meta, "context_length");
+          if (mc != null && (ctx == null || mc > ctx)) ctx = mc;
+        }
+
+        const caps = (item as Record<string, unknown>)?.capabilities;
+        if (typeof caps === "object" && caps !== null) {
+          if (getBool(caps, "supports_tools")) supportsTools = true;
+          if (getBool(caps, "supports_structured_output")) supportsStructured = true;
+          if (getBool(caps, "supports_reasoning")) supportsReasoning = true;
+        }
+
+        const supportedParams = (item as Record<string, unknown>)?.supported_parameters;
+        if (Array.isArray(supportedParams)) {
+          if (supportedParams.includes("tools")) supportsTools = true;
+          if (supportedParams.includes("reasoning") || supportedParams.includes("include_reasoning")) supportsReasoning = true;
+        }
+
+        return {
+          id,
+          object: getString(item, "object") ?? "model",
+          created: getNumber(item, "created") ?? 0,
+          owned_by: getString(item, "owned_by") ?? "",
+          context_length: ctx,
+          supports_tools: supportsTools,
+          supports_structured_output: supportsStructured,
+          supports_reasoning: supportsReasoning,
+          pricing: { input: null, output: null },
+          provider_count: 0,
+          input_modalities: [],
+        };
+      })
+      .filter((m): m is RemoteModel => m !== null)
+      .sort((a, b) => a.id.localeCompare(b.id));
+
+    return { models };
+  } catch (err) {
+    return {
+      models: [],
+      error: `Failed to fetch: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+}
+
 export async function fetchProviderModels(
   provider: ProviderId,
   apiKey?: string | null,

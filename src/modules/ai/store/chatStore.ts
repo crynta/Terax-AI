@@ -112,8 +112,8 @@ type StoreState = {
   setApiKeys: (keys: ProviderKeys) => void;
   setApiKey: (provider: ProviderId, key: string | null) => void;
 
-  selectedModelId: ModelId;
-  setSelectedModelId: (id: ModelId) => void;
+  selectedModelId: ModelId | string;
+  setSelectedModelId: (id: ModelId | string) => void;
 
   remoteModelOverride: string | null;
   setRemoteModelOverride: (id: string | null) => void;
@@ -261,6 +261,7 @@ function makeChat(sessionId: string): Chat<UIMessage> {
       usePreferencesStore.getState().huggingfaceEndpointBaseURL,
     getRemoteModelOverride: () => useChatStore.getState().remoteModelOverride,
     getOpenaiCompatibleContextWindow: () => usePreferencesStore.getState().openaiCompatibleContextWindow,
+    getCustomEndpoints: () => usePreferencesStore.getState().customEndpoints,
     onStep: (step) => {
       useChatStore.getState().patchAgentMeta({ step });
     },

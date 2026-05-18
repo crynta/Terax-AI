@@ -1,5 +1,6 @@
 import type { UIMessage } from "@ai-sdk/react";
 import { type ModelId } from "../config";
+import type { CustomEndpoint } from "@/modules/settings/store";
 import { runAgentStream, type AgentUsageDelta } from "./agent";
 import type { ProviderKeys } from "./keyring";
 import { native } from "./native";
@@ -42,7 +43,7 @@ type LiveSnapshot = {
 type Deps = {
   getKeys: () => ProviderKeys;
   toolContext: ToolContext;
-  getModelId: () => ModelId;
+  getModelId: () => ModelId | string;
   getCustomInstructions: () => string;
   getAgentPersona: () => { name: string; instructions: string } | null;
   getLive: () => LiveSnapshot;
@@ -55,6 +56,7 @@ type Deps = {
   getHuggingfaceEndpointBaseURL?: () => string | undefined;
   getRemoteModelOverride?: () => string | null;
   getOpenaiCompatibleContextWindow?: () => number | undefined;
+  getCustomEndpoints?: () => CustomEndpoint[];
   onStep?: (step: string | null) => void;
   onUsage?: (delta: AgentUsageDelta) => void;
   onCompact?: (info: { droppedCount: number }) => void;
@@ -95,6 +97,7 @@ export function createContextAwareTransport(deps: Deps) {
       huggingfaceEndpointBaseURL: deps.getHuggingfaceEndpointBaseURL?.(),
       remoteModelOverride: deps.getRemoteModelOverride?.() ?? null,
       openaiCompatibleContextWindow: deps.getOpenaiCompatibleContextWindow?.(),
+      customEndpoints: deps.getCustomEndpoints?.(),
       planMode: deps.getPlanMode?.(),
       projectMemory,
       uiMessages: messagesForRun,
