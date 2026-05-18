@@ -38,6 +38,9 @@ import {
   ArrowDown01Icon,
   CheckmarkCircle02Icon,
   Cancel01Icon,
+  Edit02Icon,
+  ViewIcon,
+  ViewOffSlashIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useEffect, useMemo, useState } from "react";
@@ -337,7 +340,8 @@ function CustomEndpointsBlock() {
   const [fetchingEp, setFetchingEp] = useState<Set<string>>(new Set());
   const [epKeys, setEpKeys] = useState<Record<string, string | null>>({});
   const [epKeyDrafts, setEpKeyDrafts] = useState<Record<string, string>>(({}));
-
+  const [epSearch, setEpSearch] = useState<Record<string, string>>({});
+  const [epReveal, setEpReveal] = useState<Set<string>>(new Set());
   useEffect(() => {
     void (async () => {
       const map: Record<string, string | null> = {};
@@ -487,13 +491,35 @@ function CustomEndpointsBlock() {
                   >
                     {loading ? "..." : "Fetch"}
                   </Button>
+                  <input
+                    type="text"
+                    value={epSearch[ep.id] ?? ""}
+                    onChange={(e) => setEpSearch((prev) => ({ ...prev, [ep.id]: e.target.value }))}
+                    placeholder="Filter..."
+                    spellCheck={false}
+                    disabled={!models || models.length === 0}
+                    className="h-6 w-20 rounded bg-background/60 px-2 text-[10px] text-foreground/80 placeholder:text-muted-foreground/40 outline-none ring-1 ring-border/30 focus:ring-border/60 disabled:opacity-30"
+                  />
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    onClick={() => setEpReveal((prev) => {
+                      const next = new Set(prev);
+                      next.has(ep.id) ? next.delete(ep.id) : next.add(ep.id);
+                      return next;
+                    })}
+                    disabled={!models || models.length === 0}
+                    className="size-6 text-muted-foreground disabled:opacity-30"
+                  >
+                    <HugeiconsIcon icon={epReveal.has(ep.id) ? ViewOffSlashIcon : ViewIcon} size={11} strokeWidth={1.75} />
+                  </Button>
                   <Button
                     size="icon"
                     variant="ghost"
                     onClick={() => startEdit(ep)}
                     className="size-6 text-muted-foreground"
                   >
-                    <HugeiconsIcon icon={Cancel01Icon} size={11} strokeWidth={1.75} />
+                    <HugeiconsIcon icon={Edit02Icon} size={11} strokeWidth={1.75} />
                   </Button>
                   <Button
                     size="icon"
@@ -504,9 +530,15 @@ function CustomEndpointsBlock() {
                     <HugeiconsIcon icon={Cancel01Icon} size={11} strokeWidth={1.75} />
                   </Button>
                 </div>
-                {models && models.length > 0 && (
+                {models && models.length > 0 && !epReveal.has(ep.id) && (
                   <div className="max-h-[160px] overflow-y-auto rounded border border-border/40 bg-background/40">
-                    {models.map((m) => (
+                    {models
+                      .filter((m) => {
+                        const q = (epSearch[ep.id] ?? "").trim().toLowerCase();
+                        if (!q) return true;
+                        return m.id.toLowerCase().includes(q);
+                      })
+                      .map((m) => (
                       <button
                         key={m.id}
                         onClick={() => void selectModel(ep, m.id, m.context_length)}
