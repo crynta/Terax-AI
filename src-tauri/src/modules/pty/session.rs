@@ -127,9 +127,8 @@ pub fn spawn(
                         }
                         filtered.clear();
                         da_filter.process(&buf[..n], &mut filtered, |reply| {
-                            if let Ok(mut w) = writer_for_da.lock() {
-                                let _ = w.write_all(reply);
-                            }
+                            let mut w = writer_for_da.lock();
+                            let _ = w.write_all(reply);
                         });
                         if filtered.is_empty() {
                             continue;
