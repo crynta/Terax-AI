@@ -29,8 +29,9 @@ import {
 import { HugeiconsIcon } from "@hugeicons/react";
 import { motion } from "motion/react";
 import { useEffect, useMemo } from "react";
-import { estimateCost, getModel, getModelContextLimit } from "../config";
+import { estimateCost, getModel, getModelContextLimit, isCustomEndpointModelId } from "../config";
 import type { SessionMeta } from "../lib/sessions";
+import { usePreferencesStore } from "@/modules/settings/preferences";
 import { useAgentsStore } from "../store/agentsStore";
 import { getOrCreateChat, useChatStore } from "../store/chatStore";
 import { usePlanStore } from "../store/planStore";
@@ -285,20 +286,23 @@ function formatTokens(n: number): string {
 
 function ContextIndicator({ messages }: { messages: UIMessage[] }) {
   const modelId = useChatStore((s) => s.selectedModelId);
+  const remoteOverride = useChatStore((s) => s.remoteModelOverride);
   const tokens = useChatStore((s) => s.agentMeta.tokens);
   const lastInput = useChatStore((s) => s.agentMeta.lastInputTokens);
   const lastCached = useChatStore((s) => s.agentMeta.lastCachedTokens);
+  const customEndpoints = usePreferencesStore((s) => s.customEndpoints);
   const estimated = useMemo(() => estimateTokens(messages), [messages]);
   const used = lastInput > 0 ? lastInput : estimated;
   const reported = tokens.inputTokens + tokens.outputTokens;
-  const max = getModelContextLimit(modelId);
+  const max = getModelContextLimit(modelId, customEndpoints);
   const modelLabel = useMemo(() => {
-    try {
-      return getModel(modelId).label;
-    } catch {
-      return modelId;
+    if (remoteOverride) return remoteOverride;
+    if (isCustomEndpointModelId(modelId)) {
+      const ep = customEndpoints.find((e) => modelId === `custom:${e.id}`);
+      if (ep) return ep.name;
     }
-  }, [modelId]);
+    return getModel(modelId).label;
+  }, [modelId, remoteOverride, customEndpoints]);
   const cost = estimateCost(modelId, tokens);
   const cacheRate =
     tokens.inputTokens > 0

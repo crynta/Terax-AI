@@ -13,7 +13,7 @@ type Args = {
   type: SubagentType;
   prompt: string;
   keys: ProviderKeys;
-  modelId: ModelId;
+  modelId: ModelId | string;
   toolContext: ToolContext;
   lmstudioBaseURL?: string;
   onStep?: (label: string) => void;

@@ -7,16 +7,22 @@ import {
   type UIMessage,
 } from "ai";
 import {
+  CUSTOM_ENDPOINT_PREFIX,
   DEFAULT_MODEL_ID,
   getModel,
   getModelContextLimit,
+  HUGGINGFACE_ENDPOINT_DEFAULT_BASE_URL,
   LMSTUDIO_DEFAULT_BASE_URL,
   MAX_AGENT_STEPS,
+  OLLAMA_DEFAULT_BASE_URL,
+  ZHIPU_DEFAULT_BASE_URL,
+  isCustomEndpointModelId,
   providerNeedsKey,
   selectSystemPrompt,
   type ModelId,
   type ProviderId,
 } from "../config";
+import type { CustomEndpoint } from "@/modules/settings/store";
 import { buildTools, type ToolContext } from "../tools/tools";
 import { compactModelMessagesDetailed } from "./compact";
 import type { ProviderKeys } from "./keyring";
@@ -61,6 +67,11 @@ export type BuildModelOptions = {
   modelIdOverride?: string;
   lmstudioBaseURL?: string;
   openaiCompatibleBaseURL?: string;
+  ollamaBaseURL?: string;
+  zhipuBaseURL?: string;
+  huggingfaceEndpointBaseURL?: string;
+  customEndpoints?: CustomEndpoint[];
+  customEndpointKeys?: Record<string, string | null>;
 };
 
 const modelCache = new Map<string, LanguageModel>();
@@ -79,7 +90,34 @@ export async function buildLanguageModel(
   const key = keys[provider] ?? "";
   const lmstudioURL = options.lmstudioBaseURL ?? LMSTUDIO_DEFAULT_BASE_URL;
   const compatURL = options.openaiCompatibleBaseURL ?? "";
-  const cacheKey = `${provider} ${key} ${resolvedModelId} ${lmstudioURL} ${compatURL}`;
+  const ollamaURL = options.ollamaBaseURL ?? OLLAMA_DEFAULT_BASE_URL;
+  const zhipuURL = options.zhipuBaseURL ?? ZHIPU_DEFAULT_BASE_URL;
+  const hfEndpointURL =
+    options.huggingfaceEndpointBaseURL ??
+    HUGGINGFACE_ENDPOINT_DEFAULT_BASE_URL;
+
+  if (isCustomEndpointModelId(resolvedModelId) && options.customEndpoints) {
+    const epId = resolvedModelId.slice(CUSTOM_ENDPOINT_PREFIX.length);
+    const ep = options.customEndpoints.find((e) => e.id === epId);
+    if (!ep) throw new Error(`Custom endpoint not found: ${epId}`);
+    const epKey = options.customEndpointKeys?.[epId] ?? keys["openai-compatible"] ?? "";
+    const cacheKey = `custom ${ep.id} ${ep.baseURL} ${ep.modelId} ${epKey}`;
+    const hit = modelCache.get(cacheKey);
+    if (hit) return hit;
+    const { createOpenAICompatible } = await import(
+      "@ai-sdk/openai-compatible"
+    );
+    const built = createOpenAICompatible({
+      name: ep.name,
+      baseURL: ep.baseURL,
+      ...(epKey ? { apiKey: epKey } : {}),
+      fetch: localProxyFetch,
+    })(ep.modelId);
+    modelCache.set(cacheKey, built);
+    return built;
+  }
+
+  const cacheKey = `${provider} ${key} ${resolvedModelId} ${lmstudioURL} ${compatURL} ${ollamaURL} ${zhipuURL} ${hfEndpointURL}`;
   const hit = modelCache.get(cacheKey);
   if (hit) return hit;
 
@@ -165,6 +203,215 @@ export async function buildLanguageModel(
       })(resolvedModelId);
       break;
     }
+    case "mistral": {
+      const { createOpenAICompatible } = await import(
+        "@ai-sdk/openai-compatible"
+      );
+      built = createOpenAICompatible({
+        name: "mistral",
+        baseURL: "https://api.mistral.ai/v1",
+        apiKey: key,
+      })(resolvedModelId);
+      break;
+    }
+    case "together": {
+      const { createOpenAICompatible } = await import(
+        "@ai-sdk/openai-compatible"
+      );
+      built = createOpenAICompatible({
+        name: "together",
+        baseURL: "https://api.together.xyz/v1",
+        apiKey: key,
+      })(resolvedModelId);
+      break;
+    }
+    case "fireworks": {
+      const { createOpenAICompatible } = await import(
+        "@ai-sdk/openai-compatible"
+      );
+      built = createOpenAICompatible({
+        name: "fireworks",
+        baseURL: "https://api.fireworks.ai/inference/v1",
+        apiKey: key,
+      })(resolvedModelId);
+      break;
+    }
+    case "perplexity": {
+      const { createOpenAICompatible } = await import(
+        "@ai-sdk/openai-compatible"
+      );
+      built = createOpenAICompatible({
+        name: "perplexity",
+        baseURL: "https://api.perplexity.ai",
+        apiKey: key,
+      })(resolvedModelId);
+      break;
+    }
+    case "cohere": {
+      const { createOpenAICompatible } = await import(
+        "@ai-sdk/openai-compatible"
+      );
+      built = createOpenAICompatible({
+        name: "cohere",
+        baseURL: "https://api.cohere.com/v2",
+        apiKey: key,
+      })(resolvedModelId);
+      break;
+    }
+    case "moonshot": {
+      const { createOpenAICompatible } = await import(
+        "@ai-sdk/openai-compatible"
+      );
+      built = createOpenAICompatible({
+        name: "moonshot",
+        baseURL: "https://api.moonshot.cn/v1",
+        apiKey: key,
+      })(resolvedModelId);
+      break;
+    }
+    case "ollama": {
+      const { createOpenAICompatible } = await import(
+        "@ai-sdk/openai-compatible"
+      );
+      built = createOpenAICompatible({
+        name: "ollama",
+        baseURL: ollamaURL,
+        ...(key ? { apiKey: key } : {}),
+      })(resolvedModelId);
+      break;
+    }
+    case "siliconflow": {
+      const { createOpenAICompatible } = await import(
+        "@ai-sdk/openai-compatible"
+      );
+      built = createOpenAICompatible({
+        name: "siliconflow",
+        baseURL: "https://api.siliconflow.cn/v1",
+        apiKey: key,
+      })(resolvedModelId);
+      break;
+    }
+    case "hyperbolic": {
+      const { createOpenAICompatible } = await import(
+        "@ai-sdk/openai-compatible"
+      );
+      built = createOpenAICompatible({
+        name: "hyperbolic",
+        baseURL: "https://api.hyperbolic.xyz/v1",
+        apiKey: key,
+      })(resolvedModelId);
+      break;
+    }
+    case "deepinfra": {
+      const { createOpenAICompatible } = await import(
+        "@ai-sdk/openai-compatible"
+      );
+      built = createOpenAICompatible({
+        name: "deepinfra",
+        baseURL: "https://api.deepinfra.com/v1/openai",
+        apiKey: key,
+      })(resolvedModelId);
+      break;
+    }
+    case "novita": {
+      const { createOpenAICompatible } = await import(
+        "@ai-sdk/openai-compatible"
+      );
+      built = createOpenAICompatible({
+        name: "novita",
+        baseURL: "https://api.novita.ai/v3/openai",
+        apiKey: key,
+      })(resolvedModelId);
+      break;
+    }
+    case "huggingface": {
+      const { createOpenAICompatible } = await import(
+        "@ai-sdk/openai-compatible"
+      );
+      built = createOpenAICompatible({
+        name: "huggingface",
+        baseURL: "https://router.huggingface.co/v1",
+        apiKey: key,
+      })(resolvedModelId);
+      break;
+    }
+    case "sambanova": {
+      const { createOpenAICompatible } = await import(
+        "@ai-sdk/openai-compatible"
+      );
+      built = createOpenAICompatible({
+        name: "sambanova",
+        baseURL: "https://api.sambanova.ai/v1",
+        apiKey: key,
+      })(resolvedModelId);
+      break;
+    }
+    case "minimax": {
+      const { createOpenAICompatible } = await import(
+        "@ai-sdk/openai-compatible"
+      );
+      built = createOpenAICompatible({
+        name: "minimax",
+        baseURL: "https://api.minimax.io/v1",
+        apiKey: key,
+      })(resolvedModelId);
+      break;
+    }
+    case "zhipu": {
+      const { createOpenAICompatible } = await import(
+        "@ai-sdk/openai-compatible"
+      );
+      built = createOpenAICompatible({
+        name: "zhipu",
+        baseURL: zhipuURL,
+        apiKey: key,
+      })(resolvedModelId);
+      break;
+    }
+    case "volcengine": {
+      const { createOpenAICompatible } = await import(
+        "@ai-sdk/openai-compatible"
+      );
+      built = createOpenAICompatible({
+        name: "volcengine",
+        baseURL: "https://ark.cn-beijing.volces.com/api/v3",
+        apiKey: key,
+      })(resolvedModelId);
+      break;
+    }
+    case "yi": {
+      const { createOpenAICompatible } = await import(
+        "@ai-sdk/openai-compatible"
+      );
+      built = createOpenAICompatible({
+        name: "yi",
+        baseURL: "https://api.01.ai/v1",
+        apiKey: key,
+      })(resolvedModelId);
+      break;
+    }
+    case "replicate": {
+      const { createOpenAICompatible } = await import(
+        "@ai-sdk/openai-compatible"
+      );
+      built = createOpenAICompatible({
+        name: "replicate",
+        baseURL: "https://api.replicate.com/v1",
+        apiKey: key,
+      })(resolvedModelId);
+      break;
+    }
+    case "huggingface-endpoint": {
+      const { createOpenAICompatible } = await import(
+        "@ai-sdk/openai-compatible"
+      );
+      built = createOpenAICompatible({
+        name: "huggingface-endpoint",
+        baseURL: hfEndpointURL,
+        ...(key ? { apiKey: key } : {}),
+      })(resolvedModelId);
+      break;
+    }
     default: {
       const _exhaustive: never = provider;
       throw new Error(`Unsupported provider: ${_exhaustive as ProviderId}`);
@@ -175,16 +422,31 @@ export async function buildLanguageModel(
 }
 
 export function buildConfiguredLanguageModel(
-  modelId: ModelId,
+  modelId: ModelId | string,
   keys: ProviderKeys,
   lmstudioBaseURL?: string,
   lmstudioModelId?: string,
   openaiCompatibleBaseURL?: string,
   openaiCompatibleModelId?: string,
+  ollamaBaseURL?: string,
+  zhipuBaseURL?: string,
+  huggingfaceEndpointBaseURL?: string,
+  remoteModelOverride?: string | null,
+  customEndpoints?: CustomEndpoint[],
+  customEndpointKeys?: Record<string, string | null>,
 ): Promise<LanguageModel> {
+  if (isCustomEndpointModelId(modelId)) {
+    return buildLanguageModel("openai-compatible", keys, modelId, {
+      openaiCompatibleBaseURL,
+      customEndpoints,
+      customEndpointKeys,
+    });
+  }
   const m = getModel(modelId);
   let resolvedId: string = m.id;
-  if (m.id === "lmstudio-local") {
+  if (remoteModelOverride) {
+    resolvedId = remoteModelOverride;
+  } else if (m.id === "lmstudio-local") {
     if (!lmstudioModelId?.trim()) {
       throw new Error(
         "LM Studio: no model id set. Open Settings → Models and enter the model id loaded in LM Studio.",
@@ -202,6 +464,9 @@ export function buildConfiguredLanguageModel(
   return buildLanguageModel(m.provider, keys, resolvedId, {
     lmstudioBaseURL,
     openaiCompatibleBaseURL,
+    ollamaBaseURL,
+    zhipuBaseURL,
+    huggingfaceEndpointBaseURL,
   });
 }
 
@@ -209,7 +474,7 @@ const PLAN_MODE_PROMPT = `## PLAN MODE — ACTIVE
 Mutating tools (write_file, edit, multi_edit, create_directory) will queue their changes for the user to review as a single diff. Do NOT execute bash_run or bash_background while plan mode is active — restrict yourself to reads (read_file, grep, glob, list_directory) and the queued mutations. After queueing the full set of edits, stop and return a brief summary; do not continue acting until the user has accepted/rejected.`;
 
 function buildStableSystem(
-  modelId: ModelId,
+  modelId: ModelId | string,
   persona: { name: string; instructions: string } | null,
   customInstructions: string | undefined,
   projectMemory: string | null,
@@ -269,7 +534,7 @@ const EMPTY_USAGE: AgentUsage = {
 
 export type RunAgentOptions = {
   keys: ProviderKeys;
-  modelId?: ModelId;
+  modelId?: ModelId | string;
   customInstructions?: string;
   agentPersona?: { name: string; instructions: string } | null;
   toolContext: ToolContext;
@@ -281,6 +546,13 @@ export type RunAgentOptions = {
   lmstudioModelId?: string;
   openaiCompatibleBaseURL?: string;
   openaiCompatibleModelId?: string;
+  ollamaBaseURL?: string;
+  zhipuBaseURL?: string;
+  huggingfaceEndpointBaseURL?: string;
+  remoteModelOverride?: string | null;
+  openaiCompatibleContextWindow?: number;
+  customEndpoints?: CustomEndpoint[];
+  customEndpointKeys?: Record<string, string | null>;
   planMode?: boolean;
   projectMemory?: string | null;
   uiMessages: UIMessage[];
@@ -296,6 +568,12 @@ export async function runAgentStream(opts: RunAgentOptions) {
     opts.lmstudioModelId,
     opts.openaiCompatibleBaseURL,
     opts.openaiCompatibleModelId,
+    opts.ollamaBaseURL,
+    opts.zhipuBaseURL,
+    opts.huggingfaceEndpointBaseURL,
+    opts.remoteModelOverride,
+    opts.customEndpoints,
+    opts.customEndpointKeys,
   );
   const provider = getModel(modelId).provider;
 
@@ -307,9 +585,12 @@ export async function runAgentStream(opts: RunAgentOptions) {
   );
 
   const history = await convertToModelMessages(opts.uiMessages);
+  const contextLimit = modelId === "openai-compatible-custom" && opts.openaiCompatibleContextWindow
+    ? opts.openaiCompatibleContextWindow
+    : getModelContextLimit(getModel(modelId).id, opts.customEndpoints);
   const compact = compactModelMessagesDetailed(
     history,
-    getModelContextLimit(getModel(modelId).id),
+    contextLimit,
   );
   const compactedHistory = compact.messages;
   if (compact.compacted) {

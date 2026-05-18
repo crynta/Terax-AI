@@ -19,24 +19,28 @@ import {
   type ModelId,
   type ProviderId,
 } from "@/modules/ai/config";
-import { clearKey, getAllKeys, setKey } from "@/modules/ai/lib/keyring";
+import { clearKey, getAllKeys, getCustomEndpointKey, setCustomEndpointKey, clearCustomEndpointKey, setKey } from "@/modules/ai/lib/keyring";
+import { fetchCustomEndpointModels, type RemoteModel } from "@/modules/ai/lib/fetchModels";
 import { usePreferencesStore } from "@/modules/settings/preferences";
 import {
   emitKeysChanged,
   setAutocompleteEnabled,
   setAutocompleteModelId,
   setAutocompleteProvider,
+  setCustomEndpoints,
   setDefaultModel,
   setLmstudioBaseURL,
   setLmstudioModelId,
-  setOpenaiCompatibleBaseURL,
-  setOpenaiCompatibleModelId,
 } from "@/modules/settings/store";
+import type { CustomEndpoint } from "@/modules/settings/store";
 import { invoke } from "@tauri-apps/api/core";
 import {
   ArrowDown01Icon,
   CheckmarkCircle02Icon,
   Cancel01Icon,
+  Edit02Icon,
+  ViewIcon,
+  ViewOffSlashIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useEffect, useMemo, useState } from "react";
@@ -116,11 +120,7 @@ export function ModelsSection() {
 
       <LocalModelsBlock />
 
-      <OpenAICompatibleBlock
-        compatKey={keys["openai-compatible"]}
-        onSaveKey={(v) => onSave("openai-compatible", v)}
-        onClearKey={() => onClear("openai-compatible")}
-      />
+      <CustomEndpointsBlock />
 
       <AutocompleteBlock keys={keys} />
     </div>
@@ -330,156 +330,375 @@ function LocalModelsBlock() {
   );
 }
 
-function OpenAICompatibleBlock({
-  compatKey,
-  onSaveKey,
-  onClearKey,
-}: {
-  compatKey: string | null;
-  onSaveKey: (v: string) => Promise<void>;
-  onClearKey: () => Promise<void>;
-}) {
-  const baseURL = usePreferencesStore((s) => s.openaiCompatibleBaseURL);
-  const modelId = usePreferencesStore((s) => s.openaiCompatibleModelId);
-  const [urlDraft, setUrlDraft] = useState(baseURL);
-  const [modelDraft, setModelDraft] = useState(modelId);
-  const [keyDraft, setKeyDraft] = useState("");
-  const [testStatus, setTestStatus] = useState<
-    "idle" | "testing" | "ok" | "fail"
-  >("idle");
+function CustomEndpointsBlock() {
+  const endpoints = usePreferencesStore((s) => s.customEndpoints);
+  const [editing, setEditing] = useState<CustomEndpoint | null>(null);
+  const [form, setForm] = useState({ name: "", baseURL: "", modelId: "", contextWindow: "128000" });
+  const [testStatus, setTestStatus] = useState<"idle" | "testing" | "ok" | "fail">("idle");
+  const [showForm, setShowForm] = useState(false);
+  const [fetchedModels, setFetchedModels] = useState<Map<string, RemoteModel[]>>(new Map());
+  const [fetchingEp, setFetchingEp] = useState<Set<string>>(new Set());
+  const [epKeys, setEpKeys] = useState<Record<string, string | null>>({});
+  const [epKeyDrafts, setEpKeyDrafts] = useState<Record<string, string>>(({}));
+  const [epSearch, setEpSearch] = useState<Record<string, string>>({});
+  const [epReveal, setEpReveal] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    void (async () => {
+      const map: Record<string, string | null> = {};
+      for (const ep of endpoints) {
+        map[ep.id] = await getCustomEndpointKey(ep.id);
+      }
+      setEpKeys(map);
+    })();
+  }, [endpoints]);
 
-  useEffect(() => setUrlDraft(baseURL), [baseURL]);
-  useEffect(() => setModelDraft(modelId), [modelId]);
+  const resetForm = () => {
+    setForm({ name: "", baseURL: "", modelId: "", contextWindow: "128000" });
+    setEditing(null);
+    setShowForm(false);
+    setTestStatus("idle");
+  };
 
-  const dirty =
-    urlDraft.trim() !== baseURL || modelDraft.trim() !== modelId;
+  const saveForm = async () => {
+    const name = form.name.trim();
+    const baseURL = form.baseURL.trim();
+    const modelId = form.modelId.trim();
+    const contextWindow = parseInt(form.contextWindow, 10) || 128000;
+    if (!name || !baseURL || !modelId) return;
 
-  const save = async () => {
-    const u = urlDraft.trim();
-    const m = modelDraft.trim();
-    if (u !== baseURL) await setOpenaiCompatibleBaseURL(u);
-    if (m !== modelId) await setOpenaiCompatibleModelId(m);
+    let updated: CustomEndpoint[];
+    if (editing) {
+      updated = endpoints.map((e) =>
+        e.id === editing.id ? { ...e, name, baseURL, modelId, contextWindow } : e,
+      );
+    } else {
+      const ep: CustomEndpoint = {
+        id: crypto.randomUUID(),
+        name,
+        baseURL,
+        modelId,
+        contextWindow,
+      };
+      updated = [...endpoints, ep];
+    }
+    await setCustomEndpoints(updated);
+    resetForm();
+  };
+
+  const removeEndpoint = async (id: string) => {
+    await setCustomEndpoints(endpoints.filter((e) => e.id !== id));
+    setFetchedModels((prev) => {
+      const next = new Map(prev);
+      next.delete(id);
+      return next;
+    });
+  };
+
+  const startEdit = (ep: CustomEndpoint) => {
+    setEditing(ep);
+    setForm({ name: ep.name, baseURL: ep.baseURL, modelId: ep.modelId, contextWindow: String(ep.contextWindow) });
+    setShowForm(true);
+    setTestStatus("idle");
   };
 
   const test = async () => {
     setTestStatus("testing");
     try {
-      const status = await invoke<number>("lm_ping", {
-        baseUrl: urlDraft,
-      });
+      const status = await invoke<number>("lm_ping", { baseUrl: form.baseURL });
       setTestStatus(status > 0 ? "ok" : "fail");
     } catch {
       setTestStatus("fail");
     }
   };
 
+  const fetchModels = async (ep: CustomEndpoint) => {
+    setFetchingEp((prev) => new Set(prev).add(ep.id));
+    try {
+      const result = await fetchCustomEndpointModels(ep.baseURL, epKeys[ep.id]);
+      if (result.models.length > 0) {
+        setFetchedModels((prev) => new Map(prev).set(ep.id, result.models));
+      } else {
+        setFetchedModels((prev) => {
+          const next = new Map(prev);
+          next.delete(ep.id);
+          return next;
+        });
+      }
+    } catch {
+      setFetchedModels((prev) => {
+        const next = new Map(prev);
+        next.delete(ep.id);
+        return next;
+      });
+    } finally {
+      setFetchingEp((prev) => {
+        const next = new Set(prev);
+        next.delete(ep.id);
+        return next;
+      });
+    }
+  };
+
+  const selectModel = async (ep: CustomEndpoint, modelId: string, ctx: number | null) => {
+    const updated = endpoints.map((e) =>
+      e.id === ep.id ? { ...e, modelId, contextWindow: ctx ?? e.contextWindow } : e,
+    );
+    await setCustomEndpoints(updated);
+  };
+
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex flex-col gap-0.5">
-        <Label>OpenAI-compatible endpoint</Label>
-        <span className="text-[10.5px] leading-relaxed text-muted-foreground">
-          Any OpenAI-compatible HTTPS endpoint — vLLM, Z.AI, Fireworks, hosted
-          Ollama, etc.
-        </span>
+      <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-0.5">
+          <Label>Custom endpoints</Label>
+          <span className="text-[10.5px] leading-relaxed text-muted-foreground">
+            Add multiple OpenAI-compatible endpoints — AWS, vLLM, VibeProxy, etc.
+          </span>
+        </div>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => { resetForm(); setShowForm(true); }}
+          className="h-7 px-2.5 text-[11px]"
+        >
+          + Add
+        </Button>
       </div>
 
-      <div className="flex flex-col gap-2.5 rounded-lg border border-border/60 bg-card/60 px-3 py-2.5">
-        <FieldRow label="Base URL">
-          <div className="flex flex-1 gap-1.5">
+      {endpoints.length > 0 && (
+        <div className="flex flex-col gap-2">
+          {endpoints.map((ep) => {
+            const models = fetchedModels.get(ep.id);
+            const loading = fetchingEp.has(ep.id);
+            return (
+              <div key={ep.id} className="flex flex-col gap-1.5 rounded-lg border border-border/60 bg-card/60 px-3 py-2">
+                <div className="flex items-center gap-2">
+                  <div className="flex flex-1 flex-col">
+                    <span className="text-[11.5px] font-medium">{ep.name}</span>
+                    <span className="truncate font-mono text-[10px] text-muted-foreground">
+                      {ep.modelId} · {ep.baseURL}
+                    </span>
+                    <span className="text-[10px] text-muted-foreground/60">
+                      context {ep.contextWindow.toLocaleString()}
+                    </span>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => void fetchModels(ep)}
+                    disabled={loading}
+                    className="h-6 px-2 text-[10px]"
+                  >
+                    {loading ? "..." : "Fetch"}
+                  </Button>
+                  <input
+                    type="text"
+                    value={epSearch[ep.id] ?? ""}
+                    onChange={(e) => setEpSearch((prev) => ({ ...prev, [ep.id]: e.target.value }))}
+                    placeholder="Filter..."
+                    spellCheck={false}
+                    disabled={!models || models.length === 0}
+                    className="h-6 w-20 rounded bg-background/60 px-2 text-[10px] text-foreground/80 placeholder:text-muted-foreground/40 outline-none ring-1 ring-border/30 focus:ring-border/60 disabled:opacity-30"
+                  />
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    onClick={() => setEpReveal((prev) => {
+                      const next = new Set(prev);
+                      next.has(ep.id) ? next.delete(ep.id) : next.add(ep.id);
+                      return next;
+                    })}
+                    disabled={!models || models.length === 0}
+                    className="size-6 text-muted-foreground disabled:opacity-30"
+                  >
+                    <HugeiconsIcon icon={epReveal.has(ep.id) ? ViewOffSlashIcon : ViewIcon} size={11} strokeWidth={1.75} />
+                  </Button>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    onClick={() => startEdit(ep)}
+                    className="size-6 text-muted-foreground"
+                  >
+                    <HugeiconsIcon icon={Edit02Icon} size={11} strokeWidth={1.75} />
+                  </Button>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    onClick={() => void removeEndpoint(ep.id)}
+                    className="size-6 text-muted-foreground hover:text-destructive"
+                  >
+                    <HugeiconsIcon icon={Cancel01Icon} size={11} strokeWidth={1.75} />
+                  </Button>
+                </div>
+                {models && models.length > 0 && !epReveal.has(ep.id) && (
+                  <div className="max-h-[160px] overflow-y-auto rounded border border-border/40 bg-background/40">
+                    {models
+                      .filter((m) => {
+                        const q = (epSearch[ep.id] ?? "").trim().toLowerCase();
+                        if (!q) return true;
+                        return m.id.toLowerCase().includes(q);
+                      })
+                      .map((m) => (
+                      <button
+                        key={m.id}
+                        onClick={() => void selectModel(ep, m.id, m.context_length)}
+                        className={cn(
+                          "flex w-full items-center gap-2 px-2 py-1 text-left hover:bg-accent/50",
+                          m.id === ep.modelId && "bg-accent/40",
+                        )}
+                      >
+                        <span className="flex-1 truncate font-mono text-[10.5px]">{m.id}</span>
+                        <span className="flex shrink-0 gap-1">
+                          {m.context_length != null && (
+                            <span className="rounded bg-muted/50 px-1 text-[9px] text-muted-foreground">
+                              {(m.context_length / 1000).toFixed(0)}k
+                            </span>
+                          )}
+                          {m.supports_tools && (
+                            <span className="rounded bg-muted/50 px-1 text-[9px] text-muted-foreground">tools</span>
+                          )}
+                          {m.supports_reasoning && (
+                            <span className="rounded bg-muted/50 px-1 text-[9px] text-muted-foreground">think</span>
+                          )}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <div className="flex items-center gap-2">
+                  <span className="w-7 shrink-0 text-[10px] text-muted-foreground">Key</span>
+                  {epKeys[ep.id] ? (
+                    <div className="flex flex-1 items-center gap-1.5">
+                      <code className="flex-1 truncate rounded bg-muted/40 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+                        {`${epKeys[ep.id]!.slice(0, 4)}${"•".repeat(6)}${epKeys[ep.id]!.slice(-4)}`}
+                      </code>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={async () => {
+                          await clearCustomEndpointKey(ep.id);
+                          await emitKeysChanged();
+                          setEpKeys((prev) => ({ ...prev, [ep.id]: null }));
+                        }}
+                        className="size-5 text-muted-foreground hover:text-destructive"
+                      >
+                        <HugeiconsIcon icon={Cancel01Icon} size={10} strokeWidth={1.75} />
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="flex flex-1 gap-1.5">
+                      <Input
+                        type="password"
+                        value={epKeyDrafts[ep.id] ?? ""}
+                        onChange={(e) => setEpKeyDrafts((prev) => ({ ...prev, [ep.id]: e.target.value }))}
+                        placeholder="Optional — leave empty for unauthenticated"
+                        spellCheck={false}
+                        className="h-6 flex-1 font-mono text-[10.5px]"
+                      />
+                      <Button
+                        size="sm"
+                        onClick={async () => {
+                          const v = (epKeyDrafts[ep.id] ?? "").trim();
+                          if (!v) return;
+                          await setCustomEndpointKey(ep.id, v);
+                          await emitKeysChanged();
+                          setEpKeys((prev) => ({ ...prev, [ep.id]: v }));
+                          setEpKeyDrafts((prev) => {
+                            const next = { ...prev };
+                            delete next[ep.id];
+                            return next;
+                          });
+                        }}
+                        disabled={!(epKeyDrafts[ep.id] ?? "").trim()}
+                        className="h-6 px-2 text-[10px]"
+                      >
+                        Save
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {endpoints.length === 0 && !showForm && (
+        <span className="text-[10.5px] text-muted-foreground/60">
+          No custom endpoints configured.
+        </span>
+      )}
+
+      {showForm && (
+        <div className="flex flex-col gap-2.5 rounded-lg border border-border/60 bg-card/60 px-3 py-2.5">
+          <FieldRow label="Name">
             <Input
-              value={urlDraft}
-              onChange={(e) => setUrlDraft(e.target.value)}
-              onBlur={() => {
-                const v = urlDraft.trim();
-                if (v !== baseURL) void setOpenaiCompatibleBaseURL(v);
-              }}
-              placeholder="https://api.example.com/v1"
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              placeholder="My endpoint"
               spellCheck={false}
-              className="h-8 flex-1 font-mono text-[11.5px]"
+              className="h-8 flex-1 text-[11.5px]"
             />
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => void test()}
-              disabled={!urlDraft.trim()}
-              className="h-8 px-3 text-[11px]"
-            >
-              Test
-            </Button>
-            <Button
-              size="sm"
-              onClick={() => void save()}
-              disabled={!dirty}
-              className="h-8 px-3 text-[11px]"
-            >
-              Save
-            </Button>
-          </div>
-        </FieldRow>
+          </FieldRow>
 
-        <FieldRow label="Model ID">
-          <Input
-            value={modelDraft}
-            onChange={(e) => setModelDraft(e.target.value)}
-            onBlur={() => {
-              const v = modelDraft.trim();
-              if (v !== modelId) void setOpenaiCompatibleModelId(v);
-            }}
-            placeholder="gpt-4o, qwen3-max, glm-4.6, …"
-            spellCheck={false}
-            className="h-8 font-mono text-[11.5px]"
-          />
-        </FieldRow>
-
-        <FieldRow label="API key">
-          {compatKey ? (
-            <div className="flex flex-1 items-center gap-1.5">
-              <code className="flex-1 truncate rounded bg-muted/40 px-2 py-1 font-mono text-[11px] text-muted-foreground">
-                {`${compatKey.slice(0, 4)}${"•".repeat(8)}${compatKey.slice(-4)}`}
-              </code>
-              <Button
-                size="icon"
-                variant="ghost"
-                onClick={() => void onClearKey()}
-                title="Remove"
-                className="size-7 text-muted-foreground hover:text-destructive"
-              >
-                <HugeiconsIcon
-                  icon={Cancel01Icon}
-                  size={12}
-                  strokeWidth={1.75}
-                />
-              </Button>
-            </div>
-          ) : (
+          <FieldRow label="Base URL">
             <div className="flex flex-1 gap-1.5">
               <Input
-                type="password"
-                value={keyDraft}
-                onChange={(e) => setKeyDraft(e.target.value)}
-                placeholder="Optional — leave empty for unauthenticated endpoints"
+                value={form.baseURL}
+                onChange={(e) => setForm({ ...form, baseURL: e.target.value })}
+                placeholder="https://api.example.com/v1"
                 spellCheck={false}
                 className="h-8 flex-1 font-mono text-[11.5px]"
               />
               <Button
                 size="sm"
-                onClick={async () => {
-                  const v = keyDraft.trim();
-                  if (!v) return;
-                  await onSaveKey(v);
-                  setKeyDraft("");
-                }}
-                disabled={!keyDraft.trim()}
+                variant="outline"
+                onClick={() => void test()}
+                disabled={!form.baseURL.trim()}
                 className="h-8 px-3 text-[11px]"
               >
-                Save
+                Test
               </Button>
             </div>
-          )}
-        </FieldRow>
+          </FieldRow>
 
-        <StatusLine status={testStatus} />
-      </div>
+          <FieldRow label="Model ID">
+            <Input
+              value={form.modelId}
+              onChange={(e) => setForm({ ...form, modelId: e.target.value })}
+              placeholder="gpt-4o, qwen3-max, glm-4.6, …"
+              spellCheck={false}
+              className="h-8 font-mono text-[11.5px]"
+            />
+          </FieldRow>
+
+          <FieldRow label="Context">
+            <Input
+              value={form.contextWindow}
+              onChange={(e) => setForm({ ...form, contextWindow: e.target.value.replace(/\D/g, "") })}
+              placeholder="128000"
+              spellCheck={false}
+              className="h-8 w-28 font-mono text-[11.5px]"
+            />
+          </FieldRow>
+
+          <StatusLine status={testStatus} />
+
+          <div className="flex justify-end gap-1.5">
+            <Button size="sm" variant="ghost" onClick={resetForm} className="h-7 px-2.5 text-[11px]">
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => void saveForm()}
+              disabled={!form.name.trim() || !form.baseURL.trim() || !form.modelId.trim()}
+              className="h-7 px-3 text-[11px]"
+            >
+              {editing ? "Update" : "Add endpoint"}
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

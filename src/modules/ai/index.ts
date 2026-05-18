@@ -9,6 +9,7 @@ export { AgentStatusPill } from "./components/AgentStatusPill";
 export {
   EMPTY_PROVIDER_KEYS,
   getAllKeys,
+  getAllCustomEndpointKeys,
   getKey,
   setKey,
   clearKey,

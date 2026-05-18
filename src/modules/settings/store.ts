@@ -1,8 +1,11 @@
 import {
   DEFAULT_AUTOCOMPLETE_MODEL,
   DEFAULT_MODEL_ID,
+  HUGGINGFACE_ENDPOINT_DEFAULT_BASE_URL,
   LMSTUDIO_DEFAULT_BASE_URL,
+  OLLAMA_DEFAULT_BASE_URL,
   OPENAI_COMPATIBLE_DEFAULT_BASE_URL,
+  ZHIPU_DEFAULT_BASE_URL,
   type AutocompleteProviderId,
   type ModelId,
 } from "@/modules/ai/config";
@@ -38,6 +41,14 @@ export const EDITOR_THEME_LABELS: Record<EditorThemeId, string> = {
   "xcode-light": "Xcode Light",
 };
 
+export type CustomEndpoint = {
+  id: string;
+  name: string;
+  baseURL: string;
+  modelId: string;
+  contextWindow: number;
+};
+
 export type Preferences = {
   theme: ThemePref;
   defaultModelId: ModelId;
@@ -52,6 +63,11 @@ export type Preferences = {
   lmstudioModelId: string;
   openaiCompatibleBaseURL: string;
   openaiCompatibleModelId: string;
+  openaiCompatibleContextWindow: number;
+  ollamaBaseURL: string;
+  zhipuBaseURL: string;
+  huggingfaceEndpointBaseURL: string;
+  customEndpoints: CustomEndpoint[];
   favoriteModelIds: string[];
   recentModelIds: string[];
   vimMode: boolean;
@@ -78,6 +94,11 @@ const KEY_LMSTUDIO_BASE_URL = "lmstudioBaseURL";
 const KEY_LMSTUDIO_MODEL_ID = "lmstudioModelId";
 const KEY_OPENAI_COMPAT_BASE_URL = "openaiCompatibleBaseURL";
 const KEY_OPENAI_COMPAT_MODEL_ID = "openaiCompatibleModelId";
+const KEY_OPENAI_COMPAT_CONTEXT_WINDOW = "openaiCompatibleContextWindow";
+const KEY_OLLAMA_BASE_URL = "ollamaBaseURL";
+const KEY_ZHIPU_BASE_URL = "zhipuBaseURL";
+const KEY_HF_ENDPOINT_BASE_URL = "huggingfaceEndpointBaseURL";
+const KEY_CUSTOM_ENDPOINTS = "customEndpoints";
 const KEY_FAVORITE_MODELS = "favoriteModelIds";
 const KEY_RECENT_MODELS = "recentModelIds";
 const KEY_VIM_MODE = "vimMode";
@@ -119,6 +140,11 @@ export const DEFAULT_PREFERENCES: Preferences = {
   lmstudioModelId: "",
   openaiCompatibleBaseURL: OPENAI_COMPATIBLE_DEFAULT_BASE_URL,
   openaiCompatibleModelId: "",
+  openaiCompatibleContextWindow: 128_000,
+  ollamaBaseURL: OLLAMA_DEFAULT_BASE_URL,
+  zhipuBaseURL: ZHIPU_DEFAULT_BASE_URL,
+  huggingfaceEndpointBaseURL: HUGGINGFACE_ENDPOINT_DEFAULT_BASE_URL,
+  customEndpoints: [],
   favoriteModelIds: [],
   recentModelIds: [],
   vimMode: false,
@@ -183,6 +209,19 @@ export async function loadPreferences(): Promise<Preferences> {
     openaiCompatibleModelId:
       get<string>(KEY_OPENAI_COMPAT_MODEL_ID) ??
       DEFAULT_PREFERENCES.openaiCompatibleModelId,
+    openaiCompatibleContextWindow:
+      get<number>(KEY_OPENAI_COMPAT_CONTEXT_WINDOW) ??
+      DEFAULT_PREFERENCES.openaiCompatibleContextWindow,
+    ollamaBaseURL:
+      get<string>(KEY_OLLAMA_BASE_URL) ?? DEFAULT_PREFERENCES.ollamaBaseURL,
+    zhipuBaseURL:
+      get<string>(KEY_ZHIPU_BASE_URL) ?? DEFAULT_PREFERENCES.zhipuBaseURL,
+    huggingfaceEndpointBaseURL:
+      get<string>(KEY_HF_ENDPOINT_BASE_URL) ??
+      DEFAULT_PREFERENCES.huggingfaceEndpointBaseURL,
+    customEndpoints:
+      get<CustomEndpoint[]>(KEY_CUSTOM_ENDPOINTS) ??
+      DEFAULT_PREFERENCES.customEndpoints,
     favoriteModelIds:
       get<string[]>(KEY_FAVORITE_MODELS) ??
       DEFAULT_PREFERENCES.favoriteModelIds,
@@ -267,6 +306,22 @@ export async function setOpenaiCompatibleModelId(value: string): Promise<void> {
   await writePref(KEY_OPENAI_COMPAT_MODEL_ID, value);
 }
 
+export async function setOpenaiCompatibleContextWindow(value: number): Promise<void> {
+  await writePref(KEY_OPENAI_COMPAT_CONTEXT_WINDOW, value);
+}
+
+export async function setOllamaBaseURL(value: string): Promise<void> {
+  await writePref(KEY_OLLAMA_BASE_URL, value);
+}
+
+export async function setZhipuBaseURL(value: string): Promise<void> {
+  await writePref(KEY_ZHIPU_BASE_URL, value);
+}
+
+export async function setCustomEndpoints(value: CustomEndpoint[]): Promise<void> {
+  await writePref(KEY_CUSTOM_ENDPOINTS, value);
+}
+
 export async function setFavoriteModelIds(value: string[]): Promise<void> {
   await writePref(KEY_FAVORITE_MODELS, value);
 }
@@ -349,6 +404,11 @@ export async function onPreferencesChange(
     [KEY_LMSTUDIO_MODEL_ID]: "lmstudioModelId",
     [KEY_OPENAI_COMPAT_BASE_URL]: "openaiCompatibleBaseURL",
     [KEY_OPENAI_COMPAT_MODEL_ID]: "openaiCompatibleModelId",
+    [KEY_OPENAI_COMPAT_CONTEXT_WINDOW]: "openaiCompatibleContextWindow",
+    [KEY_OLLAMA_BASE_URL]: "ollamaBaseURL",
+    [KEY_ZHIPU_BASE_URL]: "zhipuBaseURL",
+    [KEY_HF_ENDPOINT_BASE_URL]: "huggingfaceEndpointBaseURL",
+    [KEY_CUSTOM_ENDPOINTS]: "customEndpoints",
     [KEY_FAVORITE_MODELS]: "favoriteModelIds",
     [KEY_RECENT_MODELS]: "recentModelIds",
     [KEY_VIM_MODE]: "vimMode",
