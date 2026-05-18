@@ -13,7 +13,9 @@ use std::time::{Duration, Instant};
 
 use serde::Serialize;
 
-use crate::modules::workspace::{resolve_path, validate_wsl_distro_name, WorkspaceEnv};
+use crate::modules::workspace::{resolve_path, WorkspaceEnv};
+#[cfg(windows)]
+use crate::modules::workspace::validate_wsl_distro_name;
 
 use background::{BackgroundLogResponse, BackgroundProc, BackgroundProcInfo};
 use session::{SessionRunOutput, ShellSession};
