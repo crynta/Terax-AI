@@ -1,4 +1,6 @@
 import { readAppTokens } from "@/styles/tokens";
+import type { AppTokens } from "@/styles/tokens";
+import type { EditorThemeId } from "@/modules/settings/store";
 import type { ITheme } from "@xterm/xterm";
 
 /**
@@ -30,6 +32,46 @@ const ansi = {
   brightWhite: "#fafafa",
 } as const;
 
+const vesperAnsi = {
+  black: "#101010",
+  red: "#FF8080",
+  green: "#99FFE4",
+  yellow: "#FFC799",
+  blue: "#A0A0A0",
+  magenta: "#FF7300",
+  cyan: "#99FFE4",
+  white: "#FFFFFF",
+
+  brightBlack: "#505050",
+  brightRed: "#FF8080",
+  brightGreen: "#99FFE4",
+  brightYellow: "#FFCFA8",
+  brightBlue: "#A0A0A0",
+  brightMagenta: "#FF8080",
+  brightCyan: "#99FFE4",
+  brightWhite: "#FFFFFF",
+} as const;
+
+const sobrioAnsi = {
+  black: "#121212",
+  red: "#FD6389",
+  green: "#2EC27E",
+  yellow: "#D7AF87",
+  blue: "#87AFD7",
+  magenta: "#7CDCE7",
+  cyan: "#7CDCE7",
+  white: "#CCCCCC",
+
+  brightBlack: "#5F5F5F",
+  brightRed: "#FD6389",
+  brightGreen: "#2EC27E",
+  brightYellow: "#D7D7FF",
+  brightBlue: "#87AFD7",
+  brightMagenta: "#D7AF87",
+  brightCyan: "#7CDCE7",
+  brightWhite: "#FFFFFF",
+} as const;
+
 /** Semantic palette reused by the code editor. Kept in one place so the
  *  terminal's ANSI colors and syntax highlighting stay visually coherent. */
 export const syntaxPalette = {
@@ -51,8 +93,33 @@ export const syntaxPalette = {
  * called after the DOM is ready (after first paint); globals.css variables
  * are resolved via getComputedStyle.
  */
-export function buildTerminalTheme(): ITheme {
-  const t = readAppTokens();
+export function buildTerminalTheme(
+  tokens: AppTokens = readAppTokens(),
+  editorTheme?: EditorThemeId,
+): ITheme {
+  if (editorTheme === "vesper") {
+    return {
+      background: "#101010",
+      foreground: "#FFFFFF",
+      cursor: "#FFFFFF",
+      cursorAccent: "#101010",
+      selectionBackground: "#FFFFFF25",
+      ...vesperAnsi,
+    };
+  }
+
+  if (editorTheme === "sobrio") {
+    return {
+      background: "#121212",
+      foreground: "#FFFFFF",
+      cursor: "#FFFFFF",
+      cursorAccent: "#121212",
+      selectionBackground: "#4E4E4E",
+      ...sobrioAnsi,
+    };
+  }
+
+  const t = tokens;
   return {
     background: t.background,
     foreground: t.foreground,

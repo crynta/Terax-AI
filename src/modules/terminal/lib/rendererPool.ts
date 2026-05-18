@@ -79,7 +79,7 @@ function termOptions() {
   return {
     fontFamily: detectMonoFontFamily(),
     fontSize: Math.max(4, Math.round(prefs.terminalFontSize * prefs.zoomLevel)),
-    theme: buildTerminalTheme(),
+    theme: buildTerminalTheme(undefined, prefs.editorTheme),
     cursorBlink: false,
     cursorStyle: "bar" as const,
     cursorInactiveStyle: "outline" as const,
@@ -540,7 +540,10 @@ export function applyScrollback(value: number): void {
 }
 
 export function applyTheme(): void {
-  const theme = buildTerminalTheme();
+  const theme = buildTerminalTheme(
+    undefined,
+    usePreferencesStore.getState().editorTheme,
+  );
   for (const slot of slots) {
     slot.term.options.theme = theme;
   }
