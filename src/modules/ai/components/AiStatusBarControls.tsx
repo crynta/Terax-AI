@@ -72,7 +72,7 @@ import {
   type ModelInfo,
   type ProviderId,
 } from "../config";
-import { fetchProviderModels, type RemoteModel, type RemoteModelPricing } from "../lib/fetchModels";
+import { fetchProviderModels, fetchOllamaModels, type RemoteModel, type RemoteModelPricing } from "../lib/fetchModels";
 import { ACCEPTED_FILES, useComposer } from "../lib/composer";
 import { toggleFavoriteModel } from "../lib/modelPrefs";
 import { useChatStore } from "../store/chatStore";
@@ -279,7 +279,11 @@ function ModelDropdown() {
       next.delete(providerId);
       return next;
     });
-    const result = await fetchProviderModels(providerId, apiKeys[providerId]);
+    const result = providerId === "ollama"
+      ? await fetchOllamaModels(
+          usePreferencesStore.getState().ollamaBaseURL || "http://localhost:11434",
+        )
+      : await fetchProviderModels(providerId, apiKeys[providerId]);
     setRemoteLoading((prev) => {
       const next = new Set(prev);
       next.delete(providerId);
@@ -508,6 +512,9 @@ function ModelDropdown() {
                         pricing={rm.pricing}
                         providerCount={rm.provider_count}
                         inputModalities={rm.input_modalities}
+                        parameterSize={rm.parameter_size}
+                        quantization={rm.quantization}
+                        sizeBytes={rm.size_bytes}
                         providerId={activeProvider!}
                         selected={remoteOverride === rm.id}
                         favorite={favoriteIds.includes(rm.id)}
@@ -764,6 +771,9 @@ function RemoteModelRow({
   pricing,
   providerCount,
   inputModalities,
+  parameterSize,
+  quantization,
+  sizeBytes,
   providerId,
   selected,
   favorite,
@@ -778,6 +788,9 @@ function RemoteModelRow({
   pricing?: RemoteModelPricing;
   providerCount?: number;
   inputModalities?: string[];
+  parameterSize?: string | null;
+  quantization?: string | null;
+  sizeBytes?: number | null;
   providerId: ProviderId;
   selected: boolean;
   favorite: boolean;
@@ -848,6 +861,21 @@ function RemoteModelRow({
           {(providerCount ?? 0) > 0 ? (
             <span className="text-[7px] leading-none text-muted-foreground/90 tabular-nums">
               {providerCount}P
+            </span>
+          ) : null}
+          {parameterSize ? (
+            <span className="text-[7px] leading-none text-muted-foreground/90">
+              {parameterSize}
+            </span>
+          ) : null}
+          {quantization ? (
+            <span className="text-[7px] leading-none text-muted-foreground/90">
+              {quantization}
+            </span>
+          ) : null}
+          {sizeBytes != null && sizeBytes > 0 ? (
+            <span className="text-[7px] leading-none text-muted-foreground/90 tabular-nums">
+              {(sizeBytes / 1_073_741_824).toFixed(sizeBytes % 1_073_741_824 === 0 ? 0 : 1)}G
             </span>
           ) : null}
         </div>

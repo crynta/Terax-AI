@@ -22,6 +22,10 @@ export type RemoteModel = {
   pricing: RemoteModelPricing;
   provider_count: number;
   input_modalities: string[];
+  family: string | null;
+  parameter_size: string | null;
+  quantization: string | null;
+  size_bytes: number | null;
 };
 
 export type FetchModelsResult = {
@@ -119,6 +123,10 @@ export async function fetchCustomEndpointModels(
           pricing: { input: null, output: null },
           provider_count: 0,
           input_modalities: [],
+          family: null,
+          parameter_size: null,
+          quantization: null,
+          size_bytes: null,
         };
       })
       .filter((m): m is RemoteModel => m !== null)
@@ -257,6 +265,10 @@ export async function fetchProviderModels(
           pricing: { input: cheapestInput, output: cheapestOutput },
           provider_count: providerCount,
           input_modalities: inputModalities,
+          family: null,
+          parameter_size: null,
+          quantization: null,
+          size_bytes: null,
         };
       })
       .filter((m): m is RemoteModel => m !== null)
@@ -267,6 +279,80 @@ export async function fetchProviderModels(
     return {
       models: [],
       error: `Failed to fetch models from ${info.label}: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+}
+
+export async function fetchOllamaModels(
+  baseURL: string,
+): Promise<FetchModelsResult> {
+  const clean = baseURL.replace(/\/+$/, "");
+  const url = `${clean}/api/tags`;
+
+  try {
+    const res = await fetch(url, {
+      method: "GET",
+      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(10_000),
+    });
+
+    if (!res.ok) {
+      return { models: [], error: `Ollama /api/tags returned ${res.status}` };
+    }
+
+    const json: unknown = await res.json();
+    const modelsArr = (json as Record<string, unknown>)?.models;
+    if (!Array.isArray(modelsArr)) {
+      return { models: [] };
+    }
+
+    const models: RemoteModel[] = modelsArr
+      .map((item): RemoteModel | null => {
+        if (typeof item !== "object" || item === null) return null;
+        const name = getString(item, "name");
+        if (!name) return null;
+
+        const details = (item as Record<string, unknown>)?.details;
+        let family: string | null = null;
+        let parameterSize: string | null = null;
+        let quantization: string | null = null;
+
+        if (typeof details === "object" && details !== null) {
+          family = getString(details, "family") ?? null;
+          parameterSize = getString(details, "parameter_size") ?? null;
+          quantization = getString(details, "quantization_level") ?? null;
+        }
+
+        const sizeBytes = getNumber(item, "size") ?? null;
+        const modAt = getString(item, "modified_at");
+        const created = modAt ? new Date(modAt).getTime() / 1000 : 0;
+
+        return {
+          id: name,
+          object: "model",
+          created,
+          owned_by: family ?? "",
+          context_length: null,
+          supports_tools: false,
+          supports_structured_output: false,
+          supports_reasoning: false,
+          pricing: { input: null, output: null },
+          provider_count: 0,
+          input_modalities: [],
+          family,
+          parameter_size: parameterSize,
+          quantization,
+          size_bytes: sizeBytes ?? null,
+        };
+      })
+      .filter((m): m is RemoteModel => m !== null)
+      .sort((a, b) => a.id.localeCompare(b.id));
+
+    return { models };
+  } catch (err) {
+    return {
+      models: [],
+      error: `Failed to fetch Ollama models: ${err instanceof Error ? err.message : String(err)}`,
     };
   }
 }
