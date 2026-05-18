@@ -119,6 +119,11 @@ pub(crate) fn validate_wsl_distro_name(distro: &str) -> Result<(), String> {
     }
 }
 
+#[cfg(not(windows))]
+pub(crate) fn validate_wsl_distro_name(_distro: &str) -> Result<(), String> {
+    Ok(())
+}
+
 #[cfg(windows)]
 fn wsl_drvfs_to_windows(path: &str) -> Option<PathBuf> {
     let normalized = path.replace('\\', "/");
