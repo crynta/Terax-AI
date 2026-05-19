@@ -87,6 +87,11 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+
+          # Baked into the binary at compile time via `option_env!`.
+          # Optional — feature degrades gracefully (no presence) when unset.
+          TERAX_DISCORD_CLIENT_ID: ${{ secrets.TERAX_DISCORD_CLIENT_ID }}
+          TERAX_DISCORD_INVITE_URL: ${{ secrets.TERAX_DISCORD_INVITE_URL }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: "Terax ${{ github.ref_name }}"

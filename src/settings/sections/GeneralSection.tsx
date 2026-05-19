@@ -21,6 +21,7 @@ import {
   TERMINAL_FONT_SIZES,
   TERMINAL_SCROLLBACK_PRESETS,
   setAutostart,
+  setDiscordPresenceEnabled,
   setEditorTheme,
   setRestoreWindowState,
   setShowHidden,
@@ -65,6 +66,9 @@ export function GeneralSection() {
   );
   const terminalFontSize = usePreferencesStore((s) => s.terminalFontSize);
   const terminalScrollback = usePreferencesStore((s) => s.terminalScrollback);
+  const discordPresenceEnabled = usePreferencesStore(
+    (s) => s.discordPresenceEnabled,
+  );
 
   // Reconcile autostart pref with the actual OS state on mount — the user may
   // have toggled it from System Settings.
@@ -320,6 +324,19 @@ export function GeneralSection() {
             />
           </SettingRow>
         </div>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <Label>Integrations</Label>
+        <SettingRow
+          title="Show activity on Discord"
+          description="Share current file / terminal in your Discord status. File names only."
+        >
+          <Switch
+            checked={discordPresenceEnabled}
+            onCheckedChange={(v) => void setDiscordPresenceEnabled(v)}
+          />
+        </SettingRow>
       </div>
     </div>
   );
