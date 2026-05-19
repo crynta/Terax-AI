@@ -338,6 +338,7 @@ export default function App() {
       setActiveEditorHandle(null);
       setWorkspaceEnv(env.kind === "local" ? LOCAL_WORKSPACE : env);
       setHome(nextHome);
+      setLaunchCwd(nextHome);
       if (nextHome) {
         try {
           await native.workspaceAuthorize(nextHome);
@@ -806,7 +807,7 @@ export default function App() {
   }, [cycleSidebarView]);
 
   const openGitGraphFromContext = useCallback(async () => {
-    const known = sourceControl.repo;
+    const known = sourceControl.hasRepo ? sourceControl.repo : null;
     if (known) {
       openCommitHistoryTab({
         repoRoot: known.repoRoot,
@@ -824,6 +825,7 @@ export default function App() {
     }
   }, [
     openCommitHistoryTab,
+    sourceControl.hasRepo,
     sourceControl.repo,
     sourceControl.status?.branch,
     sourceControlContextPath,

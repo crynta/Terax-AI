@@ -104,7 +104,7 @@ pub fn spawn(
         }
     }
 
-    let mut cmd = super::build_oneshot_command(&trimmed, &workspace, cwd.as_deref());
+    let mut cmd = super::build_oneshot_command(&trimmed, &workspace, cwd.as_deref())?;
     if let (WorkspaceEnv::Local, Some(ref dir)) = (&workspace, &cwd) {
         cmd.current_dir(dir);
     }

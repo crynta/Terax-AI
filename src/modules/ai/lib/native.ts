@@ -126,7 +126,10 @@ export type GitDiscardEntry = {
 export const native = {
   workspaceCurrentDir: () => invoke<string>("workspace_current_dir"),
   workspaceAuthorize: (path: string) =>
-    invoke<string>("workspace_authorize", { path }),
+    invoke<string>("workspace_authorize", {
+      path,
+      workspace: currentWorkspaceEnv(),
+    }),
   readFile: (path: string) =>
     invoke<ReadResult>("fs_read_file", {
       path,
@@ -243,13 +246,27 @@ export const native = {
       }[]
     >("shell_bg_list"),
   gitResolveRepo: (cwd: string) =>
-    invoke<GitRepoInfo | null>("git_resolve_repo", { cwd }),
+    invoke<GitRepoInfo | null>("git_resolve_repo", {
+      cwd,
+      workspace: currentWorkspaceEnv(),
+    }),
   gitPanelSnapshot: (cwd: string) =>
-    invoke<GitPanelSnapshot>("git_panel_snapshot", { cwd }),
+    invoke<GitPanelSnapshot>("git_panel_snapshot", {
+      cwd,
+      workspace: currentWorkspaceEnv(),
+    }),
   gitStatus: (repoRoot: string) =>
-    invoke<GitStatusSnapshot>("git_status", { repoRoot }),
+    invoke<GitStatusSnapshot>("git_status", {
+      repoRoot,
+      workspace: currentWorkspaceEnv(),
+    }),
   gitDiff: (repoRoot: string, path: string | null, staged: boolean) =>
-    invoke<GitDiffResult>("git_diff", { repoRoot, path, staged }),
+    invoke<GitDiffResult>("git_diff", {
+      repoRoot,
+      path,
+      staged,
+      workspace: currentWorkspaceEnv(),
+    }),
   gitDiffContent: (
     repoRoot: string,
     path: string,
@@ -261,30 +278,66 @@ export const native = {
       path,
       staged,
       originalPath: originalPath ?? null,
+      workspace: currentWorkspaceEnv(),
     }),
   gitStage: (repoRoot: string, paths: string[]) =>
-    invoke<void>("git_stage", { repoRoot, paths }),
+    invoke<void>("git_stage", {
+      repoRoot,
+      paths,
+      workspace: currentWorkspaceEnv(),
+    }),
   gitUnstage: (repoRoot: string, paths: string[]) =>
-    invoke<void>("git_unstage", { repoRoot, paths }),
+    invoke<void>("git_unstage", {
+      repoRoot,
+      paths,
+      workspace: currentWorkspaceEnv(),
+    }),
   gitDiscard: (repoRoot: string, entries: GitDiscardEntry[]) =>
-    invoke<void>("git_discard", { repoRoot, entries }),
+    invoke<void>("git_discard", {
+      repoRoot,
+      entries,
+      workspace: currentWorkspaceEnv(),
+    }),
   gitCommit: (repoRoot: string, message: string) =>
-    invoke<GitCommitResult>("git_commit", { repoRoot, message }),
-  gitFetch: (repoRoot: string) => invoke<void>("git_fetch", { repoRoot }),
+    invoke<GitCommitResult>("git_commit", {
+      repoRoot,
+      message,
+      workspace: currentWorkspaceEnv(),
+    }),
+  gitFetch: (repoRoot: string) =>
+    invoke<void>("git_fetch", {
+      repoRoot,
+      workspace: currentWorkspaceEnv(),
+    }),
   gitPullFfOnly: (repoRoot: string) =>
-    invoke<void>("git_pull_ff_only", { repoRoot }),
+    invoke<void>("git_pull_ff_only", {
+      repoRoot,
+      workspace: currentWorkspaceEnv(),
+    }),
   gitPush: (repoRoot: string) =>
-    invoke<GitPushResult>("git_push", { repoRoot }),
+    invoke<GitPushResult>("git_push", {
+      repoRoot,
+      workspace: currentWorkspaceEnv(),
+    }),
   gitLog: (repoRoot: string, options?: { limit?: number; beforeSha?: string }) =>
     invoke<GitLogEntry[]>("git_log", {
       repoRoot,
       limit: options?.limit ?? null,
       beforeSha: options?.beforeSha ?? null,
+      workspace: currentWorkspaceEnv(),
     }),
   gitShowCommit: (repoRoot: string, sha: string) =>
-    invoke<GitDiffResult>("git_show_commit", { repoRoot, sha }),
+    invoke<GitDiffResult>("git_show_commit", {
+      repoRoot,
+      sha,
+      workspace: currentWorkspaceEnv(),
+    }),
   gitCommitFiles: (repoRoot: string, sha: string) =>
-    invoke<GitCommitFileChange[]>("git_commit_files", { repoRoot, sha }),
+    invoke<GitCommitFileChange[]>("git_commit_files", {
+      repoRoot,
+      sha,
+      workspace: currentWorkspaceEnv(),
+    }),
   gitCommitFileDiff: (
     repoRoot: string,
     sha: string,
@@ -296,7 +349,12 @@ export const native = {
       sha,
       path,
       originalPath: originalPath ?? null,
+      workspace: currentWorkspaceEnv(),
     }),
   gitRemoteUrl: (repoRoot: string, name?: string) =>
-    invoke<string | null>("git_remote_url", { repoRoot, name: name ?? null }),
+    invoke<string | null>("git_remote_url", {
+      repoRoot,
+      name: name ?? null,
+      workspace: currentWorkspaceEnv(),
+    }),
 };

@@ -1,4 +1,5 @@
-use std::ffi::OsStr;
+use std::collections::HashMap;
+use std::ffi::{OsStr, OsString};
 use std::io::Read;
 use std::path::Path;
 use std::process::{Command, Stdio};
@@ -14,6 +15,9 @@ use crate::modules::git::types::{
     GitOutput, TextSource, DEFAULT_TIMEOUT_SECS, MAX_FILE_BYTES, MAX_OUTPUT_BYTES,
     MAX_TIMEOUT_SECS, MIN_GIT_VERSION,
 };
+use crate::modules::workspace::WorkspaceEnv;
+#[cfg(windows)]
+use crate::modules::workspace::validate_wsl_distro_name;
 
 #[derive(Clone)]
 enum Availability {
@@ -29,29 +33,50 @@ struct AvailabilityCache {
     checked_at: Instant,
 }
 
-static GIT_AVAILABILITY: OnceLock<Mutex<Option<AvailabilityCache>>> = OnceLock::new();
+static GIT_AVAILABILITY: OnceLock<Mutex<HashMap<String, AvailabilityCache>>> = OnceLock::new();
 
-fn availability_cell() -> &'static Mutex<Option<AvailabilityCache>> {
-    GIT_AVAILABILITY.get_or_init(|| Mutex::new(None))
+fn availability_cell() -> &'static Mutex<HashMap<String, AvailabilityCache>> {
+    GIT_AVAILABILITY.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
-pub fn ensure_git_available() -> Result<()> {
+fn prune_expired_availability_entries(cache: &mut HashMap<String, AvailabilityCache>) {
+    cache.retain(|_, entry| entry.checked_at.elapsed() < AVAILABILITY_TTL);
+}
+
+fn workspace_cache_key(workspace: &WorkspaceEnv) -> String {
+    match workspace {
+        WorkspaceEnv::Local => "local".into(),
+        WorkspaceEnv::Wsl { distro } => format!("wsl:{distro}"),
+    }
+}
+
+pub fn ensure_git_available(workspace: &WorkspaceEnv) -> Result<()> {
+    let cache_key = workspace_cache_key(workspace);
     let cached = {
-        let guard = availability_cell().lock().expect("git availability poisoned");
+        let mut guard = availability_cell()
+            .lock()
+            .expect("git availability poisoned");
+        prune_expired_availability_entries(&mut guard);
         guard
-            .as_ref()
+            .get(&cache_key)
             .filter(|entry| entry.checked_at.elapsed() < AVAILABILITY_TTL)
             .map(|entry| entry.value.clone())
     };
     let value = match cached {
         Some(v) => v,
         None => {
-            let fresh = check_git_availability();
-            let mut guard = availability_cell().lock().expect("git availability poisoned");
-            *guard = Some(AvailabilityCache {
-                value: fresh.clone(),
-                checked_at: Instant::now(),
-            });
+            let fresh = check_git_availability(workspace);
+            let mut guard = availability_cell()
+                .lock()
+                .expect("git availability poisoned");
+            prune_expired_availability_entries(&mut guard);
+            guard.insert(
+                cache_key,
+                AvailabilityCache {
+                    value: fresh.clone(),
+                    checked_at: Instant::now(),
+                },
+            );
             fresh
         }
     };
@@ -65,8 +90,8 @@ pub fn ensure_git_available() -> Result<()> {
     }
 }
 
-fn check_git_availability() -> Availability {
-    let output = match run_git_uncached(None, ["--version"], 10) {
+fn check_git_availability(workspace: &WorkspaceEnv) -> Availability {
+    let output = match run_git_uncached(workspace, None, ["--version"], 10) {
         Ok(o) => o,
         Err(_) => return Availability::NotInstalled,
     };
@@ -107,8 +132,9 @@ fn version_meets_minimum(found: &str, required: &str) -> bool {
     true
 }
 
-pub fn git_show_text(repo_root: &Path, spec: &str) -> Result<TextSource> {
+pub fn git_show_text(workspace: &WorkspaceEnv, repo_root: &str, spec: &str) -> Result<TextSource> {
     let output = run_git(
+        workspace,
         Some(repo_root),
         [
             OsStr::new("show"),
@@ -126,13 +152,16 @@ pub fn git_show_text(repo_root: &Path, spec: &str) -> Result<TextSource> {
     Ok(decode_text(output.stdout))
 }
 
-pub fn git_stdout_line_opt<P, I, S>(cwd: P, args: I) -> Result<Option<String>>
+pub fn git_stdout_line_opt<I, S>(
+    workspace: &WorkspaceEnv,
+    cwd: &str,
+    args: I,
+) -> Result<Option<String>>
 where
-    P: AsRef<Path>,
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
 {
-    let output = run_git(Some(cwd.as_ref()), args, DEFAULT_TIMEOUT_SECS)?;
+    let output = run_git(workspace, Some(cwd), args, DEFAULT_TIMEOUT_SECS)?;
     if output.timed_out {
         return Err(GitError::TimedOut("git command"));
     }
@@ -149,13 +178,12 @@ where
 }
 
 /// Run git, returning multiple stdout lines (UTF-8). Empty trailing lines stripped.
-pub fn git_stdout_lines<P, I, S>(cwd: P, args: I) -> Result<Vec<String>>
+pub fn git_stdout_lines<I, S>(workspace: &WorkspaceEnv, cwd: &str, args: I) -> Result<Vec<String>>
 where
-    P: AsRef<Path>,
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
 {
-    let output = run_git(Some(cwd.as_ref()), args, DEFAULT_TIMEOUT_SECS)?;
+    let output = run_git(workspace, Some(cwd), args, DEFAULT_TIMEOUT_SECS)?;
     if output.timed_out {
         return Err(GitError::TimedOut("git command"));
     }
@@ -193,25 +221,35 @@ pub fn read_text_file(path: &Path) -> Result<TextSource> {
     Ok(decode_text(bytes))
 }
 
-pub fn run_git<I, S>(cwd: Option<&Path>, args: I, timeout_secs: u64) -> Result<GitOutput>
+pub fn run_git<I, S>(
+    workspace: &WorkspaceEnv,
+    cwd: Option<&str>,
+    args: I,
+    timeout_secs: u64,
+) -> Result<GitOutput>
 where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
 {
-    run_git_uncached(cwd, args, timeout_secs)
+    run_git_uncached(workspace, cwd, args, timeout_secs)
 }
 
-fn run_git_uncached<I, S>(cwd: Option<&Path>, args: I, timeout_secs: u64) -> Result<GitOutput>
+fn run_git_uncached<I, S>(
+    workspace: &WorkspaceEnv,
+    cwd: Option<&str>,
+    args: I,
+    timeout_secs: u64,
+) -> Result<GitOutput>
 where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
 {
     let dur = Duration::from_secs(timeout_secs.clamp(1, MAX_TIMEOUT_SECS));
-    let mut cmd = Command::new("git");
-    cmd.args(args);
-    if let Some(dir) = cwd {
-        cmd.current_dir(dir);
-    }
+    let args: Vec<OsString> = args
+        .into_iter()
+        .map(|arg| arg.as_ref().to_os_string())
+        .collect();
+    let mut cmd = build_git_command(workspace, cwd, &args)?;
     cmd.env("GIT_TERMINAL_PROMPT", "0")
         .env("GIT_ASKPASS", "")
         .env("SSH_ASKPASS", "")
@@ -221,9 +259,7 @@ where
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
 
-    let child = Arc::new(
-        SharedChild::spawn(&mut cmd).map_err(|e| GitError::Spawn(e.to_string()))?,
-    );
+    let child = Arc::new(SharedChild::spawn(&mut cmd).map_err(|e| GitError::Spawn(e.to_string()))?);
     let mut stdout_pipe = child
         .take_stdout()
         .ok_or_else(|| GitError::Spawn("no stdout pipe".into()))?;
@@ -263,6 +299,33 @@ where
         timed_out,
         truncated: stdout_truncated,
     })
+}
+
+fn build_git_command(
+    _workspace: &WorkspaceEnv,
+    cwd: Option<&str>,
+    args: &[OsString],
+) -> Result<Command> {
+    #[cfg(windows)]
+    if let WorkspaceEnv::Wsl { distro } = _workspace {
+        validate_wsl_distro_name(distro)
+            .map_err(|_| GitError::command("unsafe WSL distro name", distro.clone()))?;
+        let mut cmd = Command::new("wsl.exe");
+        cmd.arg("-d").arg(distro);
+        if let Some(cwd) = cwd.filter(|s| !s.is_empty()) {
+            cmd.arg("--cd").arg(cwd);
+        }
+        cmd.arg("--exec").arg("git");
+        cmd.args(args);
+        return Ok(cmd);
+    }
+
+    let mut cmd = Command::new("git");
+    cmd.args(args);
+    if let Some(dir) = cwd.filter(|s| !s.is_empty()) {
+        cmd.current_dir(Path::new(dir));
+    }
+    Ok(cmd)
 }
 
 pub fn ensure_success(output: &GitOutput, context: &'static str) -> Result<()> {
@@ -342,11 +405,25 @@ fn drain<R: Read>(reader: &mut R, prealloc: usize) -> (Vec<u8>, bool) {
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_git_version, version_meets_minimum};
+    #[cfg(windows)]
+    use super::build_git_command;
+    use super::{
+        parse_git_version, prune_expired_availability_entries, version_meets_minimum, Availability,
+        AvailabilityCache, AVAILABILITY_TTL,
+    };
+    #[cfg(windows)]
+    use crate::modules::workspace::WorkspaceEnv;
+    use std::collections::HashMap;
+    #[cfg(windows)]
+    use std::ffi::OsString;
+    use std::time::{Duration, Instant};
 
     #[test]
     fn extracts_simple_version() {
-        assert_eq!(parse_git_version("git version 2.42.0"), Some("2.42.0".into()));
+        assert_eq!(
+            parse_git_version("git version 2.42.0"),
+            Some("2.42.0".into())
+        );
     }
 
     #[test]
@@ -367,5 +444,76 @@ mod tests {
         // patch component must not regress the comparison
         assert!(version_meets_minimum("2.23.5", "2.23.4"));
         assert!(!version_meets_minimum("2.23.3", "2.23.4"));
+    }
+
+    #[test]
+    fn prunes_expired_workspace_availability_entries() {
+        let mut cache = HashMap::from([
+            (
+                "local".to_string(),
+                AvailabilityCache {
+                    value: Availability::Ok,
+                    checked_at: Instant::now(),
+                },
+            ),
+            (
+                "wsl:Ubuntu".to_string(),
+                AvailabilityCache {
+                    value: Availability::NotInstalled,
+                    checked_at: Instant::now() - AVAILABILITY_TTL - Duration::from_secs(1),
+                },
+            ),
+        ]);
+
+        prune_expired_availability_entries(&mut cache);
+
+        assert!(cache.contains_key("local"));
+        assert!(!cache.contains_key("wsl:Ubuntu"));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn builds_wsl_git_command_with_cd_and_exec() {
+        let cmd = build_git_command(
+            &WorkspaceEnv::Wsl {
+                distro: "Ubuntu".into(),
+            },
+            Some("/home/vinicios/Nova pasta/repo"),
+            &[OsString::from("status"), OsString::from("--short")],
+        )
+        .expect("valid WSL distro");
+        let program = cmd.get_program().to_string_lossy().into_owned();
+        let args: Vec<String> = cmd
+            .get_args()
+            .map(|arg| arg.to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(program, "wsl.exe");
+        assert_eq!(
+            args,
+            vec![
+                "-d",
+                "Ubuntu",
+                "--cd",
+                "/home/vinicios/Nova pasta/repo",
+                "--exec",
+                "git",
+                "status",
+                "--short",
+            ]
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn rejects_unsafe_wsl_distro_name_for_git_command() {
+        let err = build_git_command(
+            &WorkspaceEnv::Wsl {
+                distro: "../Ubuntu".into(),
+            },
+            None,
+            &[],
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("unsafe WSL distro name"));
     }
 }

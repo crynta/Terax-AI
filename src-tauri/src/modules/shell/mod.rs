@@ -14,6 +14,8 @@ use std::time::{Duration, Instant};
 use serde::Serialize;
 
 use crate::modules::workspace::{resolve_path, WorkspaceEnv};
+#[cfg(windows)]
+use crate::modules::workspace::validate_wsl_distro_name;
 
 use background::{BackgroundLogResponse, BackgroundProc, BackgroundProcInfo};
 use session::{SessionRunOutput, ShellSession};
@@ -90,7 +92,7 @@ fn run_blocking(
     workspace: WorkspaceEnv,
     dur: Duration,
 ) -> Result<CommandOutput, String> {
-    let mut cmd = build_oneshot_command(&command, &workspace, cwd.as_deref());
+    let mut cmd = build_oneshot_command(&command, &workspace, cwd.as_deref())?;
     if let (WorkspaceEnv::Local, Some(dir)) = (&workspace, cwd) {
         cmd.current_dir(dir);
     }
@@ -277,23 +279,24 @@ pub(crate) fn build_oneshot_command(
     command: &str,
     #[cfg_attr(not(windows), allow(unused_variables))] workspace: &WorkspaceEnv,
     #[cfg_attr(not(windows), allow(unused_variables))] cwd: Option<&str>,
-) -> Command {
+) -> Result<Command, String> {
     #[cfg(windows)]
     if let WorkspaceEnv::Wsl { distro } = workspace {
+        validate_wsl_distro_name(distro)?;
         let mut cmd = Command::new("wsl.exe");
         cmd.arg("-d").arg(distro);
         if let Some(cwd) = cwd.filter(|s| !s.is_empty()) {
             cmd.arg("--cd").arg(cwd);
         }
         cmd.arg("--exec").arg("sh").arg("-lc").arg(command);
-        return cmd;
+        return Ok(cmd);
     }
     #[cfg(unix)]
     {
         let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
         let mut cmd = Command::new(shell);
         cmd.arg("-lc").arg(command);
-        cmd
+        Ok(cmd)
     }
     #[cfg(windows)]
     {
@@ -309,7 +312,7 @@ pub(crate) fn build_oneshot_command(
         } else {
             cmd.arg("-NoProfile").arg("-Command").arg(command);
         }
-        cmd
+        Ok(cmd)
     }
 }
 

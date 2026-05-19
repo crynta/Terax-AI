@@ -1,7 +1,14 @@
 use std::path::{Path, PathBuf};
 
 use crate::modules::git::errors::{GitError, Result};
-use crate::modules::workspace::WorkspaceRegistry;
+use crate::modules::workspace::{resolve_path, WorkspaceEnv, WorkspaceRegistry};
+
+#[derive(Clone, Debug)]
+pub struct ResolvedGitDirectory {
+    pub workspace: WorkspaceEnv,
+    pub git_path: String,
+    pub local_path: PathBuf,
+}
 
 pub fn split_upstream(upstream: &str) -> (Option<String>, Option<String>) {
     match upstream.split_once('/') {
@@ -14,18 +21,36 @@ pub fn display_path(path: &Path) -> String {
     path.to_string_lossy().replace('\\', "/")
 }
 
-pub fn canonical_dir(path: &str) -> Result<PathBuf> {
-    let candidate = PathBuf::from(path);
+fn normalize_git_path(path: &str) -> String {
+    path.replace('\\', "/")
+}
+
+pub fn canonical_dir(path: &str, workspace: &WorkspaceEnv) -> Result<ResolvedGitDirectory> {
+    let candidate = resolve_path(path, workspace);
     if !candidate.is_dir() {
         return Err(GitError::NotADirectory(path.to_string()));
     }
-    std::fs::canonicalize(&candidate).map_err(GitError::Io)
+    let local_path = std::fs::canonicalize(&candidate).map_err(GitError::Io)?;
+    let git_path = if workspace.is_wsl() {
+        normalize_git_path(path)
+    } else {
+        display_path(&local_path)
+    };
+    Ok(ResolvedGitDirectory {
+        workspace: workspace.clone(),
+        git_path,
+        local_path,
+    })
 }
 
-pub fn authorized_repo_root(registry: &WorkspaceRegistry, path: &str) -> Result<PathBuf> {
-    let canonical = canonical_dir(path)?;
-    if !registry.is_authorized(&canonical) {
-        return Err(GitError::PathOutsideWorkspace(canonical));
+pub fn authorized_repo_root(
+    registry: &WorkspaceRegistry,
+    path: &str,
+    workspace: &WorkspaceEnv,
+) -> Result<ResolvedGitDirectory> {
+    let canonical = canonical_dir(path, workspace)?;
+    if !registry.is_authorized(&canonical.local_path) {
+        return Err(GitError::PathOutsideWorkspace(canonical.local_path.clone()));
     }
     Ok(canonical)
 }
