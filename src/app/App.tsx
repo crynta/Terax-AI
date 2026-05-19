@@ -881,9 +881,19 @@ export default function App() {
       "view.zoomIn": zoomIn,
       "view.zoomOut": zoomOut,
       "view.zoomReset": zoomReset,
+      "terminal.kill": () => {
+        if (activeLeafId === null) return;
+        const tab = tabsRef.current.find(
+          (t) => t.kind === "terminal" && hasLeaf(t.paneTree, activeLeafId),
+        );
+        if (!tab || tab.kind !== "terminal") return;
+        const cwd = findLeafCwd(tab.paneTree, activeLeafId) ?? tab.cwd;
+        void respawnSession(activeLeafId, cwd);
+      },
     }),
     [
       activeId,
+      activeLeafId,
       cycleTab,
       handleCloseTabOrPane,
       openNewTab,
@@ -904,6 +914,14 @@ export default function App() {
   );
 
   useGlobalShortcuts(shortcutHandlers);
+
+  useEffect(() => {
+    const block = (e: KeyboardEvent) => {
+      if (e.key === "p" && (e.ctrlKey || e.metaKey)) e.preventDefault();
+    };
+    window.addEventListener("keydown", block, { capture: true });
+    return () => window.removeEventListener("keydown", block, { capture: true });
+  }, []);
 
   const registerTerminalHandle = useCallback(
     (leafId: number, h: TerminalPaneHandle | null) => {

@@ -28,7 +28,8 @@ export type ShortcutId =
   | "ai.askSelection"
   | "shortcuts.open"
   | "settings.open"
-  | "sidebar.toggle";
+  | "sidebar.toggle"
+  | "terminal.kill";
 
 export type ShortcutGroup =
   | "General"
@@ -36,6 +37,7 @@ export type ShortcutGroup =
   | "Panes"
   | "Search"
   | "AI"
+  | "Terminal"
   | "View";
 
 export type KeyBinding = {
@@ -158,6 +160,12 @@ export const SHORTCUTS: Shortcut[] = [
     defaultBindings: [{ [MOD_PROP]: true, key: "f" }],
   },
   {
+    id: "terminal.kill",
+    label: "Kill terminal process",
+    group: "Terminal",
+    defaultBindings: [{ [MOD_PROP]: true, shift: true, key: "k" }],
+  },
+  {
     id: "ai.toggle",
     label: "Toggle AI agent",
     group: "AI",
@@ -213,6 +221,7 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
   "General",
   "Tabs",
   "Panes",
+  "Terminal",
   "View",
   "Search",
   "AI",
