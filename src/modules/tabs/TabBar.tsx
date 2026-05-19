@@ -31,6 +31,7 @@ type Props = {
   onNewPrivate: () => void;
   onNewPreview: () => void;
   onNewEditor: () => void;
+  onNewApiTester: () => void;
   onClose: (id: number) => void;
   /** Pin (promote) a preview tab to persistent on double-click. */
   onPin: (id: number) => void;
@@ -45,6 +46,7 @@ export function TabBar({
   onNewPrivate,
   onNewPreview,
   onNewEditor,
+  onNewApiTester,
   onClose,
   onPin,
   compact,
@@ -195,6 +197,10 @@ export function TabBar({
                 {fmtShortcut(MOD_KEY, "P")}
               </span>
             </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => onNewApiTester()}>
+              <HugeiconsIcon icon={Globe02Icon} size={14} strokeWidth={1.75} />
+              <span className="flex-1">API Tester</span>
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
@@ -203,6 +209,16 @@ export function TabBar({
 }
 
 function TabIcon({ tab }: { tab: Tab }) {
+  if (tab.kind === "api-tester") {
+    return (
+      <HugeiconsIcon
+        icon={Globe02Icon}
+        size={14}
+        strokeWidth={2}
+        className="shrink-0 text-indigo-500"
+      />
+    );
+  }
   if (tab.kind === "editor") {
     const url = fileIconUrl(tab.title);
     return url ? <img src={url} alt="" className="size-3.5 shrink-0" /> : null;
@@ -268,13 +284,14 @@ function TabIcon({ tab }: { tab: Tab }) {
 }
 
 function labelFor(t: Tab): string {
+  if (t.kind === "api-tester") return t.title;
   if (t.kind === "editor") return t.title;
   if (t.kind === "preview") return t.title;
   if (t.kind === "ai-diff") return t.title;
   if (t.kind === "git-diff") return t.title;
   if (t.kind === "git-history") return t.title;
   if (t.kind === "git-commit-file") return t.title;
-  if (!t.cwd) return t.title;
+  if (!("cwd" in t) || !t.cwd) return t.title;
   const parts = t.cwd.split(/[\\/]/).filter(Boolean);
   return parts.length ? parts[parts.length - 1] : "/";
 }

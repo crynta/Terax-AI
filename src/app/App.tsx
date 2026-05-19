@@ -37,6 +37,7 @@ import {
   NewEditorDialog,
   type EditorPaneHandle,
 } from "@/modules/editor";
+import { ApiTesterView } from "@/modules/api-tester";
 import { GitHistoryStack } from "@/modules/git-history";
 import { useZoom } from "@/lib/useZoom";
 import { FileExplorer, type FileExplorerHandle } from "@/modules/explorer";
@@ -151,6 +152,7 @@ export default function App() {
     openGitDiffTab,
     openCommitHistoryTab,
     openCommitFileDiffTab,
+    openApiTesterTab,
     closeTab,
     updateTab,
     selectByIndex,
@@ -426,6 +428,7 @@ export default function App() {
   const isGitDiffTab =
     activeTab?.kind === "git-diff" || activeTab?.kind === "git-commit-file";
   const isGitHistoryTab = activeTab?.kind === "git-history";
+  const isApiTesterTab = activeTab?.kind === "api-tester";
 
   // When an AI diff is approved (write_file applied to disk), reload any
   // open editor tabs for that path so the user sees the new content. We
@@ -861,6 +864,7 @@ export default function App() {
       "tab.newPrivate": openNewPrivateTab,
       "tab.newPreview": () => openPreviewTab(""),
       "tab.newEditor": () => setNewEditorOpen(true),
+      "tab.newApiTester": openApiTesterTab,
       "tab.close": handleCloseTabOrPane,
       "tab.next": () => cycleTab(1),
       "tab.prev": () => cycleTab(-1),
@@ -888,6 +892,7 @@ export default function App() {
       openNewTab,
       openNewPrivateTab,
       openPreviewTab,
+      openApiTesterTab,
       selectByIndex,
       splitActivePaneInActiveTab,
       focusNextPaneInTab,
@@ -1119,6 +1124,15 @@ export default function App() {
           onOpenCommitFile={openCommitFileDiffTab}
         />
       </div>
+      <div
+        className={cn(
+          "absolute inset-0",
+          !isApiTesterTab && "invisible pointer-events-none",
+        )}
+        aria-hidden={!isApiTesterTab}
+      >
+        {isApiTesterTab && <ApiTesterView />}
+      </div>
     </div>
   );
 
@@ -1134,6 +1148,7 @@ export default function App() {
             onNewPrivate={openNewPrivateTab}
             onNewPreview={() => openPreviewTab("")}
             onNewEditor={() => setNewEditorOpen(true)}
+            onNewApiTester={openApiTesterTab}
             onClose={handleClose}
             onPin={pinTab}
             onToggleSidebar={toggleSidebar}

@@ -93,6 +93,12 @@ export type GitCommitFileDiffTab = {
   originalPath: string | null;
 };
 
+export type ApiTesterTab = {
+  id: number;
+  kind: "api-tester";
+  title: string;
+};
+
 export type Tab =
   | TerminalTab
   | EditorTab
@@ -100,7 +106,8 @@ export type Tab =
   | AiDiffTab
   | GitDiffTab
   | GitHistoryTab
-  | GitCommitFileDiffTab;
+  | GitCommitFileDiffTab
+  | ApiTesterTab;
 
 export type TabPatch = Partial<{
   title: string;
@@ -511,6 +518,28 @@ export function useTabs(initial?: Partial<TerminalTab>) {
     [],
   );
 
+  const openApiTesterTab = useCallback(() => {
+    const existing = tabsRef.current.find((t) => t.kind === "api-tester");
+    if (existing) {
+      setActiveId(existing.id);
+      return existing.id;
+    }
+
+    const id = nextIdRef.current++;
+    const nextTabs = [
+      ...tabsRef.current,
+      {
+        id,
+        kind: "api-tester",
+        title: "API Tester",
+      } satisfies ApiTesterTab,
+    ];
+    tabsRef.current = nextTabs;
+    setTabs(nextTabs);
+    setActiveId(id);
+    return id;
+  }, []);
+
   const closeTab = useCallback((id: number) => {
     let toDispose: number[] = [];
     setTabs((curr) => {
@@ -754,6 +783,7 @@ export function useTabs(initial?: Partial<TerminalTab>) {
     openGitDiffTab,
     openCommitHistoryTab,
     openCommitFileDiffTab,
+    openApiTesterTab,
     setAiDiffStatus,
     closeAiDiffTab,
     closeTab,
