@@ -43,6 +43,11 @@ pub struct Session {
     pub killer: Mutex<Box<dyn ChildKiller + Send + Sync>>,
     pub writer: Arc<Mutex<Box<dyn Write + Send>>>,
     pub master: Mutex<Box<dyn MasterPty + Send>>,
+    /// PID of the spawned shell process. Captured before `child` is moved into the
+    /// waiter thread so platform-specific introspection (e.g. `/proc/<pid>/cwd`) can
+    /// resolve the live CWD long after spawn. `None` when the platform doesn't expose
+    /// a usable PID — keep callers defensive.
+    pub child_pid: Option<u32>,
 }
 
 impl Drop for Session {
@@ -111,6 +116,9 @@ pub fn spawn(
     // can't outlive an aborted pty_open.
     let mut guard = ChildKillGuard::new(child.clone_killer());
     let killer = child.clone_killer();
+    // Snapshot the PID now; the `child` handle is moved into the waiter thread below
+    // and there's no second chance after that point.
+    let child_pid = child.process_id();
     let mut reader = pair.master.try_clone_reader().map_err(|e| e.to_string())?;
     let writer: Arc<Mutex<Box<dyn Write + Send>>> = Arc::new(Mutex::new(
         pair.master.take_writer().map_err(|e| e.to_string())?,
@@ -135,6 +143,7 @@ pub fn spawn(
         killer: Mutex::new(killer),
         writer: writer.clone(),
         master: Mutex::new(pair.master),
+        child_pid,
     });
 
     let pending: Arc<(Mutex<Vec<u8>>, Condvar)> = Arc::new((
