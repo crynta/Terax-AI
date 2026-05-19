@@ -58,6 +58,7 @@ export type Preferences = {
   showHidden: boolean;
   terminalWebglEnabled: boolean;
   terminalFontFamily: string;
+  terminalLetterSpacing: number;
   terminalFontSize: number;
   terminalScrollback: number;
   lastWslDistro: string | null;
@@ -86,6 +87,7 @@ const KEY_SHOW_HIDDEN = "showHidden";
 const LEGACY_KEY_SHOW_HIDDEN_DIRS = "showHiddenDirectories";
 const KEY_TERMINAL_WEBGL_ENABLED = "terminalWebglEnabled";
 const KEY_TERMINAL_FONT_FAMILY = "terminalFontFamily";
+const KEY_TERMINAL_LETTER_SPACING = "terminalLetterSpacing";
 const KEY_TERMINAL_FONT_SIZE = "terminalFontSize";
 const KEY_TERMINAL_SCROLLBACK = "terminalScrollback";
 const KEY_LAST_WSL_DISTRO = "lastWslDistro";
@@ -127,6 +129,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   showHidden: false,
   terminalWebglEnabled: true,
   terminalFontFamily: "",
+  terminalLetterSpacing: 0,
   terminalFontSize: TERMINAL_FONT_SIZE_DEFAULT,
   terminalScrollback: TERMINAL_SCROLLBACK_DEFAULT,
   lastWslDistro: null,
@@ -202,6 +205,9 @@ export async function loadPreferences(): Promise<Preferences> {
     terminalFontFamily:
       get<string>(KEY_TERMINAL_FONT_FAMILY) ??
       DEFAULT_PREFERENCES.terminalFontFamily,
+    terminalLetterSpacing:
+      get<number>(KEY_TERMINAL_LETTER_SPACING) ??
+      DEFAULT_PREFERENCES.terminalLetterSpacing,
     terminalFontSize:
       get<number>(KEY_TERMINAL_FONT_SIZE) ??
       DEFAULT_PREFERENCES.terminalFontSize,
@@ -297,6 +303,11 @@ export async function setTerminalFontFamily(value: string): Promise<void> {
   await writePref(KEY_TERMINAL_FONT_FAMILY, value.trim());
 }
 
+export async function setTerminalLetterSpacing(value: number): Promise<void> {
+  const clamped = Number.isFinite(value) ? Math.max(-10, Math.min(10, Math.round(value))) : 0;
+  await writePref(KEY_TERMINAL_LETTER_SPACING, clamped);
+}
+
 export async function setTerminalFontSize(value: number): Promise<void> {
   const clamped = Number.isFinite(value)
     ? Math.min(
@@ -365,6 +376,7 @@ export async function onPreferencesChange(
     [KEY_SHOW_HIDDEN]: "showHidden",
     [KEY_TERMINAL_WEBGL_ENABLED]: "terminalWebglEnabled",
     [KEY_TERMINAL_FONT_FAMILY]: "terminalFontFamily",
+    [KEY_TERMINAL_LETTER_SPACING]: "terminalLetterSpacing",
     [KEY_TERMINAL_FONT_SIZE]: "terminalFontSize",
     [KEY_TERMINAL_SCROLLBACK]: "terminalScrollback",
     [KEY_LAST_WSL_DISTRO]: "lastWslDistro",

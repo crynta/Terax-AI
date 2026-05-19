@@ -78,6 +78,7 @@ function termOptions() {
   const prefs = usePreferencesStore.getState();
   return {
     fontFamily: prefs.terminalFontFamily || detectMonoFontFamily(),
+    letterSpacing: prefs.terminalLetterSpacing,
     fontSize: Math.max(4, Math.round(prefs.terminalFontSize * prefs.zoomLevel)),
     theme: buildTerminalTheme(),
     cursorBlink: false,
@@ -529,6 +530,14 @@ export function applyFontSize(size: number): void {
       const bridge = adapter?.resolveLeaf(slot.currentLeafId);
       bridge?.resizePty(slot.term.cols, slot.term.rows);
     }
+  }
+}
+
+export function applyLetterSpacing(spacing: number): void {
+  for (const slot of slots) {
+    if (slot.term.options.letterSpacing === spacing) continue;
+    slot.term.options.letterSpacing = spacing;
+    slot.fitAddon.fit();
   }
 }
 

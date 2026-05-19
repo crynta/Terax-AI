@@ -13,6 +13,7 @@ import {
   acquireSlot,
   applyFontFamily,
   applyFontSize,
+  applyLetterSpacing,
   applyTheme as applyPoolTheme,
   applyScrollback,
   applyWebglPreference,
@@ -339,6 +340,11 @@ export function useTerminalSession({
   useEffect(() => {
     applyFontFamily(fontFamily);
   }, [fontFamily]);
+
+  const letterSpacing = usePreferencesStore((p) => p.terminalLetterSpacing);
+  useEffect(() => {
+    applyLetterSpacing(letterSpacing);
+  }, [letterSpacing]);
 
   const scrollback = usePreferencesStore((p) => p.terminalScrollback);
   useEffect(() => {
