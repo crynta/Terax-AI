@@ -49,7 +49,7 @@ import {
 import { PreviewStack, type PreviewPaneHandle } from "@/modules/preview";
 import { openSettingsWindow } from "@/modules/settings/openSettingsWindow";
 import { usePreferencesStore } from "@/modules/settings/preferences";
-import { onKeysChanged } from "@/modules/settings/store";
+import { onKeysChanged, setLastWorkspaceRoot } from "@/modules/settings/store";
 import {
   ShortcutsDialog,
   useGlobalShortcuts,
@@ -412,6 +412,15 @@ export default function App() {
     if (!prefsHydrated) return;
     setSelectedModelId(prefDefaultModel);
   }, [prefsHydrated, prefDefaultModel, setSelectedModelId]);
+
+  const workspaceRestoredRef = useRef(false);
+  useEffect(() => {
+    if (!prefsHydrated || workspaceRestoredRef.current) return;
+    const root = usePreferencesStore.getState().lastWorkspaceRoot ?? home;
+    if (!root) return;
+    resetWorkspace(root);
+    workspaceRestoredRef.current = true;
+  }, [prefsHydrated, home, resetWorkspace]);
 
   const hydrateSessions = useChatStore((s) => s.hydrateSessions);
   useEffect(() => {
@@ -988,6 +997,18 @@ export default function App() {
   }, [isTerminalTab, isEditorTab, activeId, activeSearchAddon, activeEditorHandle]);
 
   const activeCwd = activeTerminalLeafCwd;
+
+  const lastPersistedWorkspaceRoot = useRef<string | null>(null);
+  useEffect(() => {
+    if (!activeCwd || activeCwd === lastPersistedWorkspaceRoot.current) return;
+    
+    const timeoutId = setTimeout(() => {
+      lastPersistedWorkspaceRoot.current = activeCwd;
+      void setLastWorkspaceRoot(activeCwd);
+    }, 1000);
+
+    return () => clearTimeout(timeoutId);
+  }, [activeCwd]);
 
   useEffect(() => {
     const findCwd = () => {
