@@ -23,6 +23,11 @@ export type SlotAdapter = {
 export type LeafBridge = {
   writeToPty(data: string): void;
   resizePty(cols: number, rows: number): void;
+  // Force a SIGWINCH on the underlying PTY at the given dims. Implemented
+  // as a +1 row / restore bump because the Linux kernel suppresses winsize
+  // ioctls that don't actually change the size. Used to make alt-screen
+  // TUIs repaint from scratch after they were dormant.
+  kickPty(cols: number, rows: number): void;
 };
 
 export type Slot = {
@@ -196,6 +201,10 @@ export type AcquireParams = {
   leafId: number;
   container: HTMLDivElement;
   snapshot: string | null;
+  // True if the slot was in alt-screen mode (TUI like vim, htop, dofek)
+  // at the time it was released. When set, bindSlot skips ring replay
+  // and kicks SIGWINCH so the TUI repaints from scratch.
+  altScreen: boolean;
   drainRing: (write: (bytes: Uint8Array) => void) => void;
   shellExited: boolean;
   searchQuery: string | null;
@@ -257,7 +266,14 @@ function bindSlot(slot: Slot, p: AcquireParams): void {
       console.warn("[terax] snapshot replay failed:", e);
     }
   }
-  p.drainRing((bytes) => slot.term.write(bytes));
+  if (p.altScreen) {
+    // Discard the dormant ring. TUI output is incremental cursor-positioned
+    // updates that can't be replayed coherently on top of a stale snapshot
+    // — see the SIGWINCH kick below, which makes the TUI redraw from scratch.
+    p.drainRing(() => {});
+  } else {
+    p.drainRing((bytes) => slot.term.write(bytes));
+  }
   try {
     slot.term.write("\x1b[?25h");
   } catch {}
@@ -286,6 +302,10 @@ function bindSlot(slot: Slot, p: AcquireParams): void {
   }
 
   applyCursorBlinkOnSlot(slot, adapter?.isLeafFocused(p.leafId) ?? false);
+
+  if (p.altScreen && !p.shellExited) {
+    adapter?.resolveLeaf(p.leafId)?.kickPty(slot.term.cols, slot.term.rows);
+  }
 
   scheduleUnhide(slot);
 
@@ -369,6 +389,7 @@ export type SerializeOutput = {
   snapshot: string | null;
   cols: number;
   rows: number;
+  altScreen: boolean;
 };
 
 export function releaseSlot(leafId: number): SerializeOutput | null {
@@ -390,7 +411,12 @@ function serializeSlot(slot: Slot): SerializeOutput {
   } catch (e) {
     console.warn("[terax] serialize failed:", e);
   }
-  return { snapshot, cols: slot.term.cols, rows: slot.term.rows };
+  return {
+    snapshot,
+    cols: slot.term.cols,
+    rows: slot.term.rows,
+    altScreen: isAltScreen(slot),
+  };
 }
 
 function detachSlotFromLeaf(slot: Slot): void {
