@@ -37,6 +37,7 @@ import {
   NewEditorDialog,
   type EditorPaneHandle,
 } from "@/modules/editor";
+import { useDiscordPresence } from "@/modules/discord";
 import { GitHistoryStack } from "@/modules/git-history";
 import { getLaunchDir } from "@/lib/launchDir";
 import { useZoom } from "@/lib/useZoom";
@@ -479,6 +480,11 @@ export default function App() {
     tabs,
     launchCwd ?? home,
   );
+
+  useDiscordPresence({
+    activeTab,
+    workspaceRoot: explorerRoot ?? launchCwd ?? home ?? null,
+  });
 
   useEffect(() => {
     setActiveSearchAddon(

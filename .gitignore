@@ -24,3 +24,6 @@ dist-ssr
 *.sw?
 
 *.tsbuildinfo
+
+# Local env overrides (Discord Client ID etc.); see .env.example
+.env.local

@@ -1,6 +1,6 @@
 mod modules;
 
-use modules::{fs, git, net, pty, secrets, shell, workspace};
+use modules::{discord, fs, git, net, pty, secrets, shell, workspace};
 use std::sync::Mutex;
 use tauri::{Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_window_state::StateFlags;
@@ -19,7 +19,9 @@ fn parse_launch_dir() -> Option<String> {
         if arg.starts_with('-') {
             continue;
         }
-        let Ok(canon) = std::fs::canonicalize(&arg) else { continue };
+        let Ok(canon) = std::fs::canonicalize(&arg) else {
+            continue;
+        };
         if !canon.is_dir() {
             continue;
         }
@@ -117,6 +119,7 @@ pub fn run() {
             registry
         })
         .manage(LaunchDir(Mutex::new(parse_launch_dir())))
+        .manage(discord::DiscordState::default())
         .invoke_handler(tauri::generate_handler![
             pty::pty_open,
             pty::pty_write,
@@ -175,6 +178,9 @@ pub fn run() {
             net::lm_ping,
             net::ai_http_request,
             net::ai_http_stream,
+            discord::discord_update_activity,
+            discord::discord_clear_activity,
+            discord::discord_invite_url,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

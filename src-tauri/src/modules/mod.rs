@@ -1,3 +1,4 @@
+pub mod discord;
 pub mod fs;
 pub mod git;
 pub mod net;
