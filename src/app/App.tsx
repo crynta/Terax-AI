@@ -820,11 +820,11 @@ export default function App() {
     ? sourceControlContextPath
     : badgeContextPath;
   const sourceControl = useSourceControl(sourceControlPath, true);
-  const sourceControlVisible =
-    sourceControl.hasRepo || sidebarView === "source-control";
 
   const toggleSourceControl = useCallback(() => {
-    if (!sourceControl.hasRepo && sidebarView !== "source-control") return;
+    const cannotToggleToSourceControl =
+      !sourceControl.hasRepo && sidebarView !== "source-control";
+    if (cannotToggleToSourceControl) return;
     cycleSidebarView("source-control");
   }, [cycleSidebarView, sidebarView, sourceControl.hasRepo]);
 
@@ -1288,7 +1288,7 @@ export default function App() {
                     activeView={sidebarView}
                     onSelectView={persistSidebarView}
                     changedCount={sourceControl.changedCount}
-                    hasRepo={sourceControlVisible}
+                    hasRepo={sourceControl.hasRepo}
                   />
                 </div>
               </ResizablePanel>

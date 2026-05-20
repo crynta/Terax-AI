@@ -467,12 +467,27 @@ export function useSourceControl(
 
   useEffect(() => {
     if (!enabled || !state.hasRepo) return;
-    const interval = window.setInterval(() => {
-      if (document.visibilityState !== "visible") return;
-      void refresh({ remote: "never" });
-    }, STATUS_POLL_INTERVAL_MS);
+    let intervalId: number | null = null;
+    const start = () => {
+      if (intervalId !== null || document.visibilityState !== "visible") return;
+      intervalId = window.setInterval(() => {
+        void refresh({ remote: "never" });
+      }, STATUS_POLL_INTERVAL_MS);
+    };
+    const stop = () => {
+      if (intervalId === null) return;
+      window.clearInterval(intervalId);
+      intervalId = null;
+    };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") start();
+      else stop();
+    };
+    start();
+    document.addEventListener("visibilitychange", onVisibilityChange);
     return () => {
-      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      stop();
     };
   }, [enabled, refresh, state.hasRepo]);
 

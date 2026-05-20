@@ -126,6 +126,22 @@ function statusAccent(code: string): string {
   }
 }
 
+function stageBusyKey(entry: SourceControlEntry): string {
+  return `${entry.mode === "+" ? "unstage" : "stage"}:${entry.path}`;
+}
+
+function entryRowKey(entry: SourceControlEntry): string {
+  return `entry:${entry.key}`;
+}
+
+function toggleEntryStage(
+  entry: SourceControlEntry,
+  stageEntry: (entry: SourceControlEntry) => Promise<void>,
+  unstageEntry: (entry: SourceControlEntry) => Promise<void>,
+): Promise<void> {
+  return entry.mode === "+" ? unstageEntry(entry) : stageEntry(entry);
+}
+
 export const SourceControlPanel = memo(function SourceControlPanel({
   open,
   sourceControl,
@@ -258,7 +274,7 @@ export const SourceControlPanel = memo(function SourceControlPanel({
       });
     } else {
       for (const entry of scm.stagedEntries) {
-        result.push({ kind: "entry", key: `entry:${entry.key}`, entry });
+        result.push({ kind: "entry", key: entryRowKey(entry), entry });
       }
     }
     result.push({
@@ -275,7 +291,7 @@ export const SourceControlPanel = memo(function SourceControlPanel({
       });
     } else {
       for (const entry of scm.unstagedEntries) {
-        result.push({ kind: "entry", key: `entry:${entry.key}`, entry });
+        result.push({ kind: "entry", key: entryRowKey(entry), entry });
       }
     }
     return result;
@@ -397,7 +413,7 @@ export const SourceControlPanel = memo(function SourceControlPanel({
           const entry = focusedEntry();
           if (entry) {
             event.preventDefault();
-            void (entry.mode === "+" ? scm.unstageEntry(entry) : scm.stageEntry(entry));
+            void toggleEntryStage(entry, scm.stageEntry, scm.unstageEntry);
           }
           break;
         }
@@ -969,7 +985,7 @@ const EntryRow = memo(function EntryRow({
   const pathLabel = entryPathLabel(entry);
   const showDiscard = entry.mode === "-";
   const isStageBusy =
-    actionBusy === `${entry.mode === "+" ? "unstage" : "stage"}:${entry.path}`;
+    actionBusy === stageBusyKey(entry);
   const isDiscardBusy = actionBusy === `discard:${entry.path}`;
   const disabled = actionBusy !== null;
 
@@ -1062,9 +1078,7 @@ const EntryRow = memo(function EntryRow({
             aria-label={`Stage ${entry.path}`}
             checked={entry.mode === "+"}
             disabled={disabled}
-            onCheckedChange={() =>
-              void (entry.mode === "+" ? onUnstageEntry(entry) : onStageEntry(entry))
-            }
+            onCheckedChange={() => void toggleEntryStage(entry, onStageEntry, onUnstageEntry)}
             className="size-3.5"
           />
         )}
