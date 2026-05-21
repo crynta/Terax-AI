@@ -299,12 +299,11 @@ mod unix {
             fs::create_dir_all(&home).unwrap();
             fs::write(
                 home.join(".zshrc"),
-                r#"HISTFILE="${ZDOTDIR:-$HOME}/.zsh_history""#,
+                r#"[ -z "$HISTFILE" ] && HISTFILE="$HOME/.zsh_history""#,
             )
             .unwrap();
 
             let out = Command::new("zsh")
-                .arg("-d")
                 .arg("-i")
                 .arg("-c")
                 .arg(r#"print -r -- "$HISTFILE""#)
@@ -341,7 +340,7 @@ mod unix {
             fs::create_dir_all(&home).unwrap();
             fs::write(
                 home.join(".zshrc"),
-                r#"HISTFILE="${ZDOTDIR:-$HOME}/.zsh_history""#,
+                r#"[ -z "$HISTFILE" ] && HISTFILE="$HOME/.zsh_history""#,
             )
             .unwrap();
             fs::write(
@@ -351,7 +350,6 @@ mod unix {
             .unwrap();
 
             let out = Command::new("zsh")
-                .arg("-d")
                 .arg("-i")
                 .arg("-c")
                 .arg(r#"builtin fc -l 1"#)
