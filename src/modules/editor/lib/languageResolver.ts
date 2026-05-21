@@ -71,6 +71,10 @@ const loaders: Record<string, LanguageLoader> = {
 
   html: () => import("@codemirror/lang-html").then((m) => m.html()),
   htm: () => import("@codemirror/lang-html").then((m) => m.html()),
+  astro: () =>
+    import("@codemirror/lang-html").then((m) =>
+      m.html({ selfClosingTags: true }),
+    ),
   css: () => import("@codemirror/lang-css").then((m) => m.css()),
 
   php: () => import("@codemirror/lang-php").then((m) => m.php({ plain: true })),
