@@ -19,6 +19,7 @@ export const EMPTY_PROVIDER_KEYS: ProviderKeys = {
   deepseek: null,
   mistral: null,
   openrouter: null,
+  "nvidia-nim": null,
   "openai-compatible": null,
   lmstudio: null,
   mlx: null,

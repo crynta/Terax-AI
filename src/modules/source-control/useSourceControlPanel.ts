@@ -375,6 +375,7 @@ export function useSourceControlPanel(
   const lmstudioModelId = usePreferencesStore((state) => state.lmstudioModelId);
   const mlxModelId = usePreferencesStore((state) => state.mlxModelId);
   const ollamaModelId = usePreferencesStore((state) => state.ollamaModelId);
+  const nvidiaNimModelId = usePreferencesStore((state) => state.nvidiaNimModelId);
   const openaiCompatibleBaseURL = usePreferencesStore(
     (state) => state.openaiCompatibleBaseURL,
   );
@@ -478,6 +479,9 @@ export function useSourceControlPanel(
     if (selectedModel.id === "ollama-local" && !ollamaModelId.trim()) {
       return "Connect an AI provider to generate commit messages";
     }
+    if (selectedModel.id === "nvidia-nim-custom" && !nvidiaNimModelId.trim()) {
+      return "Connect an AI provider to generate commit messages";
+    }
     if (
       selectedModel.id === "openai-compatible-custom" &&
       (!openaiCompatibleBaseURL.trim() || !openaiCompatibleModelId.trim())
@@ -492,6 +496,7 @@ export function useSourceControlPanel(
     ollamaModelId,
     openaiCompatibleBaseURL,
     openaiCompatibleModelId,
+    nvidiaNimModelId,
     selectedModel,
     stagedEntries.length,
   ]);
@@ -875,6 +880,8 @@ export function useSourceControlPanel(
           ollamaModelId,
           openaiCompatibleBaseURL,
           openaiCompatibleModelId,
+          nvidiaNimBaseURL: prefs.nvidiaNimBaseURL,
+          nvidiaNimModelId,
         },
       );
       const result = await generateText({
@@ -915,6 +922,7 @@ export function useSourceControlPanel(
     ollamaModelId,
     openaiCompatibleBaseURL,
     openaiCompatibleModelId,
+    nvidiaNimModelId,
     repo,
     selectedModelId,
     stagedEntries,

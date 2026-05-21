@@ -12,6 +12,7 @@ import {
   getModelContextLimit,
   LMSTUDIO_DEFAULT_BASE_URL,
   MLX_DEFAULT_BASE_URL,
+  NVIDIA_NIM_DEFAULT_BASE_URL,
   OLLAMA_DEFAULT_BASE_URL,
   MAX_AGENT_STEPS,
   providerNeedsKey,
@@ -65,6 +66,7 @@ export type BuildModelOptions = {
   mlxBaseURL?: string;
   ollamaBaseURL?: string;
   openaiCompatibleBaseURL?: string;
+  nvidiaNimBaseURL?: string;
 };
 
 const modelCache = new Map<string, LanguageModel>();
@@ -155,6 +157,17 @@ export async function buildLanguageModel(
       })(resolvedModelId);
       break;
     }
+    case "nvidia-nim": {
+      const { createOpenAICompatible } =
+        await import("@ai-sdk/openai-compatible");
+      built = createOpenAICompatible({
+        name: "nvidia-nim",
+        baseURL: options.nvidiaNimBaseURL ?? NVIDIA_NIM_DEFAULT_BASE_URL,
+        apiKey: key,
+        fetch: localProxyFetch,
+      })(resolvedModelId);
+      break;
+    }
     case "openai-compatible": {
       if (!compatURL) {
         throw new Error(
@@ -219,6 +232,8 @@ export type LocalProviderConfig = {
   ollamaModelId?: string;
   openaiCompatibleBaseURL?: string;
   openaiCompatibleModelId?: string;
+  nvidiaNimBaseURL?: string;
+  nvidiaNimModelId?: string;
 };
 
 export function buildConfiguredLanguageModel(
@@ -256,12 +271,20 @@ export function buildConfiguredLanguageModel(
       );
     }
     resolvedId = local.openaiCompatibleModelId.trim();
+  } else if (m.id === "nvidia-nim-custom") {
+    if (!local.nvidiaNimModelId?.trim()) {
+      throw new Error(
+        "NVIDIA NIM: no model id set. Open Settings → AI and enter the custom Model ID.",
+      );
+    }
+    resolvedId = local.nvidiaNimModelId.trim();
   }
   return buildLanguageModel(m.provider, keys, resolvedId, {
     lmstudioBaseURL: local.lmstudioBaseURL,
     mlxBaseURL: local.mlxBaseURL,
     ollamaBaseURL: local.ollamaBaseURL,
     openaiCompatibleBaseURL: local.openaiCompatibleBaseURL,
+    nvidiaNimBaseURL: local.nvidiaNimBaseURL,
   });
 }
 
@@ -346,6 +369,8 @@ export type RunAgentOptions = {
   openaiCompatibleBaseURL?: string;
   openaiCompatibleModelId?: string;
   openaiCompatibleContextLimit?: number;
+  nvidiaNimBaseURL?: string;
+  nvidiaNimModelId?: string;
   planMode?: boolean;
   projectMemory?: string | null;
   uiMessages: UIMessage[];
@@ -363,6 +388,8 @@ export async function runAgentStream(opts: RunAgentOptions) {
     ollamaModelId: opts.ollamaModelId,
     openaiCompatibleBaseURL: opts.openaiCompatibleBaseURL,
     openaiCompatibleModelId: opts.openaiCompatibleModelId,
+    nvidiaNimBaseURL: opts.nvidiaNimBaseURL,
+    nvidiaNimModelId: opts.nvidiaNimModelId,
   });
   const provider = getModel(modelId).provider;
 
@@ -392,10 +419,13 @@ export async function runAgentStream(opts: RunAgentOptions) {
   const finalMessages = applyCacheBreakpoints(messages, provider);
 
   let stepsSeen = 0;
+  const isKimi =
+    model.modelId?.includes("kimi") || model.modelId?.includes("moonshot");
+
   return streamText({
     model,
     messages: finalMessages,
-    tools: buildTools(opts.toolContext),
+    tools: isKimi ? undefined : buildTools(opts.toolContext),
     stopWhen: stepCountIs(MAX_AGENT_STEPS),
     abortSignal: opts.abortSignal,
     onStepFinish: (step) => {

@@ -3,6 +3,7 @@ import {
   DEFAULT_MODEL_ID,
   LMSTUDIO_DEFAULT_BASE_URL,
   MLX_DEFAULT_BASE_URL,
+  NVIDIA_NIM_DEFAULT_BASE_URL,
   OLLAMA_DEFAULT_BASE_URL,
   OPENAI_COMPATIBLE_DEFAULT_BASE_URL,
   type AutocompleteProviderId,
@@ -59,6 +60,8 @@ export type Preferences = {
   openaiCompatibleBaseURL: string;
   openaiCompatibleModelId: string;
   openaiCompatibleContextLimit: number;
+  nvidiaNimBaseURL: string;
+  nvidiaNimModelId: string;
   favoriteModelIds: string[];
   recentModelIds: string[];
   vimMode: boolean;
@@ -92,6 +95,8 @@ const KEY_OLLAMA_MODEL_ID = "ollamaModelId";
 const KEY_OPENAI_COMPAT_BASE_URL = "openaiCompatibleBaseURL";
 const KEY_OPENAI_COMPAT_MODEL_ID = "openaiCompatibleModelId";
 const KEY_OPENAI_COMPAT_CONTEXT_LIMIT = "openaiCompatibleContextLimit";
+const KEY_NVIDIA_NIM_BASE_URL = "nvidiaNimBaseURL";
+const KEY_NVIDIA_NIM_MODEL_ID = "nvidiaNimModelId";
 const KEY_FAVORITE_MODELS = "favoriteModelIds";
 const KEY_RECENT_MODELS = "recentModelIds";
 const KEY_VIM_MODE = "vimMode";
@@ -140,6 +145,8 @@ export const DEFAULT_PREFERENCES: Preferences = {
   openaiCompatibleBaseURL: OPENAI_COMPATIBLE_DEFAULT_BASE_URL,
   openaiCompatibleModelId: "",
   openaiCompatibleContextLimit: 128_000,
+  nvidiaNimBaseURL: NVIDIA_NIM_DEFAULT_BASE_URL,
+  nvidiaNimModelId: "",
   favoriteModelIds: [],
   recentModelIds: [],
   vimMode: false,
@@ -217,6 +224,12 @@ export async function loadPreferences(): Promise<Preferences> {
     openaiCompatibleContextLimit:
       get<number>(KEY_OPENAI_COMPAT_CONTEXT_LIMIT) ??
       DEFAULT_PREFERENCES.openaiCompatibleContextLimit,
+    nvidiaNimBaseURL:
+      get<string>(KEY_NVIDIA_NIM_BASE_URL) ??
+      DEFAULT_PREFERENCES.nvidiaNimBaseURL,
+    nvidiaNimModelId:
+      get<string>(KEY_NVIDIA_NIM_MODEL_ID) ??
+      DEFAULT_PREFERENCES.nvidiaNimModelId,
     favoriteModelIds:
       get<string[]>(KEY_FAVORITE_MODELS) ??
       DEFAULT_PREFERENCES.favoriteModelIds,
@@ -332,6 +345,14 @@ export async function setOpenaiCompatibleContextLimit(
   await writePref(KEY_OPENAI_COMPAT_CONTEXT_LIMIT, clamped);
 }
 
+export async function setNvidiaNimBaseURL(value: string): Promise<void> {
+  await writePref(KEY_NVIDIA_NIM_BASE_URL, value);
+}
+
+export async function setNvidiaNimModelId(value: string): Promise<void> {
+  await writePref(KEY_NVIDIA_NIM_MODEL_ID, value);
+}
+
 export async function setFavoriteModelIds(value: string[]): Promise<void> {
   await writePref(KEY_FAVORITE_MODELS, value);
 }
@@ -428,6 +449,8 @@ export async function onPreferencesChange(
     [KEY_OPENAI_COMPAT_BASE_URL]: "openaiCompatibleBaseURL",
     [KEY_OPENAI_COMPAT_MODEL_ID]: "openaiCompatibleModelId",
     [KEY_OPENAI_COMPAT_CONTEXT_LIMIT]: "openaiCompatibleContextLimit",
+    [KEY_NVIDIA_NIM_BASE_URL]: "nvidiaNimBaseURL",
+    [KEY_NVIDIA_NIM_MODEL_ID]: "nvidiaNimModelId",
     [KEY_FAVORITE_MODELS]: "favoriteModelIds",
     [KEY_RECENT_MODELS]: "recentModelIds",
     [KEY_VIM_MODE]: "vimMode",

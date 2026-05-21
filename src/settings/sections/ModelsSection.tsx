@@ -38,6 +38,8 @@ import {
   setOpenaiCompatibleBaseURL,
   setOpenaiCompatibleContextLimit,
   setOpenaiCompatibleModelId,
+  setNvidiaNimBaseURL,
+  setNvidiaNimModelId,
 } from "@/modules/settings/store";
 import {
   Add01Icon,
@@ -117,6 +119,8 @@ export function ModelsSection() {
   const compatContextLimit = usePreferencesStore(
     (s) => s.openaiCompatibleContextLimit,
   );
+  const nvidiaNimBaseURL = usePreferencesStore((s) => s.nvidiaNimBaseURL);
+  const nvidiaNimModelId = usePreferencesStore((s) => s.nvidiaNimModelId);
 
   useEffect(() => {
     void getAllKeys().then(setKeys);
@@ -261,14 +265,23 @@ export function ModelsSection() {
                   onRemove={() => removeProvider(p.id)}
                 />
               ) : (
-                <ProviderKeyCard
-                  key={p.id}
-                  provider={p}
-                  currentKey={keys[p.id]}
-                  onSave={(v) => onSaveKey(p.id, v)}
-                  onClear={() => onClearKey(p.id)}
-                  onRemove={() => removeProvider(p.id)}
-                />
+                <div key={p.id} className="flex flex-col gap-1.5">
+                  <ProviderKeyCard
+                    provider={p}
+                    currentKey={keys[p.id]}
+                    onSave={(v) => onSaveKey(p.id, v)}
+                    onClear={() => onClearKey(p.id)}
+                    onRemove={() => removeProvider(p.id)}
+                  />
+                  {p.id === "nvidia-nim" ? (
+                    <NvidiaNimConfigRow
+                      baseURL={nvidiaNimBaseURL}
+                      setBaseURL={setNvidiaNimBaseURL}
+                      modelId={nvidiaNimModelId}
+                      setModelId={setNvidiaNimModelId}
+                    />
+                  ) : null}
+                </div>
               ),
             )}
           </div>
@@ -836,5 +849,86 @@ function Label({ children }: { children: React.ReactNode }) {
     <span className="text-[11px] font-medium tracking-tight text-muted-foreground">
       {children}
     </span>
+  );
+}
+
+function NvidiaNimConfigRow({
+  baseURL,
+  setBaseURL,
+  modelId,
+  setModelId,
+}: {
+  baseURL: string;
+  setBaseURL: (v: string) => Promise<void>;
+  modelId: string;
+  setModelId: (v: string) => Promise<void>;
+}) {
+  const DEFAULT_NIM_URL = "https://integrate.api.nvidia.com/v1";
+  const [draftURL, setDraftURL] = useState(baseURL);
+  const [draftModel, setDraftModel] = useState(modelId);
+
+  const isCustom = baseURL !== DEFAULT_NIM_URL || !!modelId;
+
+  // Sync drafts when prefs change externally
+  useEffect(() => {
+    setDraftURL(baseURL);
+  }, [baseURL]);
+
+  useEffect(() => {
+    setDraftModel(modelId);
+  }, [modelId]);
+
+  return (
+    <div className="flex flex-col gap-2 rounded-lg border border-border/40 bg-card/40 px-3 py-2.5">
+      <FieldRow label="Model ID">
+        <Input
+          value={draftModel}
+          onChange={(e) => setDraftModel(e.target.value)}
+          onBlur={() => {
+            const v = draftModel.trim();
+            if (v !== modelId) void setModelId(v);
+          }}
+          placeholder="e.g. nvidia/llama-3.3-nemotron-super-49b-v1"
+          spellCheck={false}
+          className="h-8 flex-1 font-mono text-[11.5px]"
+        />
+      </FieldRow>
+      <FieldRow label="Base URL">
+        <div className="flex flex-1 gap-1.5">
+          <Input
+            value={draftURL}
+            onChange={(e) => setDraftURL(e.target.value)}
+            onBlur={() => {
+              const v = draftURL.trim() || DEFAULT_NIM_URL;
+              if (v !== baseURL) void setBaseURL(v);
+            }}
+            placeholder={DEFAULT_NIM_URL}
+            spellCheck={false}
+            className="h-8 flex-1 font-mono text-[11.5px]"
+          />
+        </div>
+      </FieldRow>
+      <div className="flex items-center justify-between mt-0.5 border-t border-border/20 pt-1.5">
+        <p className="text-[10px] leading-relaxed text-muted-foreground/70">
+          Configure a self-hosted NIM endpoint or use custom hosted model IDs.
+        </p>
+        {isCustom ? (
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => {
+              setDraftURL(DEFAULT_NIM_URL);
+              setDraftModel("");
+              void setBaseURL(DEFAULT_NIM_URL);
+              void setModelId("");
+            }}
+            className="h-6 px-1.5 text-[10px] text-muted-foreground hover:text-destructive"
+            title="Reset to default"
+          >
+            Reset
+          </Button>
+        ) : null}
+      </div>
+    </div>
   );
 }

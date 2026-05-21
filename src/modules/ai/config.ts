@@ -10,6 +10,7 @@ export type ProviderId =
   | "deepseek"
   | "mistral"
   | "openrouter"
+  | "nvidia-nim"
   | "openai-compatible"
   | "lmstudio"
   | "mlx"
@@ -88,6 +89,13 @@ export const PROVIDERS: readonly ProviderInfo[] = [
     keyringAccount: "openrouter-api-key",
     keyPrefix: "sk-or-",
     consoleUrl: "https://openrouter.ai/keys",
+  },
+  {
+    id: "nvidia-nim",
+    label: "NVIDIA NIM",
+    keyringAccount: "nvidia-nim-api-key",
+    keyPrefix: "nvapi-",
+    consoleUrl: "https://build.nvidia.com/settings/api-keys",
   },
   {
     id: "openai-compatible",
@@ -555,6 +563,52 @@ export const MODELS = [
     tags: ["tools", "coding"],
   },
 
+  // ── NVIDIA NIM ────────────────────────────────────────────────────────────
+  {
+    id: "nvidia/llama-3.3-nemotron-super-49b-v1",
+    provider: "nvidia-nim",
+    label: "Nemotron Super 49B",
+    hint: "Best",
+    description: "NVIDIA's flagship reasoning + instruct model.",
+    capabilities: { intelligence: 5, speed: 3, cost: 3 },
+    tags: ["reasoning", "tools", "coding"],
+  },
+  {
+    id: "meta/llama-3.3-70b-instruct",
+    provider: "nvidia-nim",
+    label: "Llama 3.3 70B",
+    hint: "Fast",
+    description: "Meta's 70B Llama on NVIDIA inference.",
+    capabilities: { intelligence: 4, speed: 4, cost: 4 },
+    tags: ["tools", "coding"],
+  },
+  {
+    id: "deepseek-ai/deepseek-r1",
+    provider: "nvidia-nim",
+    label: "DeepSeek R1",
+    hint: "Reasoning",
+    description: "DeepSeek R1 chain-of-thought on NIM.",
+    capabilities: { intelligence: 5, speed: 2, cost: 4 },
+    tags: ["reasoning", "coding"],
+  },
+  {
+    id: "qwen/qwen2.5-coder-32b-instruct",
+    provider: "nvidia-nim",
+    label: "Qwen 2.5 Coder 32B",
+    hint: "Code",
+    description: "Alibaba's coding model on NIM.",
+    capabilities: { intelligence: 4, speed: 4, cost: 5 },
+    tags: ["coding", "tools"],
+  },
+  {
+    id: "nvidia-nim-custom",
+    provider: "nvidia-nim",
+    label: "Custom NIM model",
+    hint: "Configurable",
+    description: "A self-hosted or custom NVIDIA NIM model.",
+    capabilities: { intelligence: 3, speed: 3, cost: 3 },
+  },
+
   // ── Generic OpenAI-compatible (user-defined endpoint) ─────────────────────
   {
     id: "openai-compatible-custom",
@@ -657,6 +711,11 @@ export const MODEL_CONTEXT_LIMITS: Record<string, number> = {
   "mistral-large-latest": 131_072,
   "mistral-medium-latest": 32_768,
   "codestral-latest": 256_000,
+  "nvidia/llama-3.3-nemotron-super-49b-v1": 131_072,
+  "meta/llama-3.3-70b-instruct": 131_072,
+  "deepseek-ai/deepseek-r1": 64_000,
+  "qwen/qwen2.5-coder-32b-instruct": 131_072,
+  "nvidia-nim-custom": 128_000,
 };
 
 export function getModelContextLimit(
@@ -747,13 +806,16 @@ export const DEFAULT_AUTOCOMPLETE_MODEL: Partial<Record<ProviderId, string>> = {
   xai: "grok-4-fast-reasoning",
   deepseek: "deepseek-v4-flash",
   openrouter: "openai/gpt-5.4-mini",
+  "nvidia-nim": "meta/llama-3.3-70b-instruct",
   "openai-compatible": "",
 };
 
 /** Curated list of fast models suitable for inline completion (speed ≥ 4). */
 export function getAutocompleteEligibleModels(): readonly ModelInfo[] {
   return MODELS.filter(
-    (m) => m.capabilities.speed >= 4 && m.id !== "openai-compatible-custom",
+    (m) =>
+      (m.capabilities.speed >= 4 || m.id === "nvidia-nim-custom") &&
+      m.id !== "openai-compatible-custom",
   );
 }
 
@@ -761,6 +823,7 @@ export const LMSTUDIO_DEFAULT_BASE_URL = "http://localhost:1234/v1";
 export const MLX_DEFAULT_BASE_URL = "http://127.0.0.1:8080/v1";
 export const OLLAMA_DEFAULT_BASE_URL = "http://localhost:11434/v1";
 export const OPENAI_COMPATIBLE_DEFAULT_BASE_URL = "";
+export const NVIDIA_NIM_DEFAULT_BASE_URL = "https://integrate.api.nvidia.com/v1";
 export const MAX_AGENT_STEPS = 24;
 export const TERMINAL_BUFFER_LINES = 300;
 
