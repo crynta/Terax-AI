@@ -40,7 +40,7 @@ Terax is a fast, lightweight AI terminal (ADE) built on Tauri 2 + Rust and React
 - CodeMirror 6 with language support for TS/JS, Rust, Python, HTML/CSS, JSON, Markdown
 - Inline AI autocomplete and AI edit diffs
 - Vim mode
-- Prebuilt themes: Tokyo Night, Nord, GitHub, Atom One, Aura, Copilot, Xcode
+- Prebuilt themes: Tokyo Night, Nord, GitHub, Atom One, Aura, Copilot, Sobrio, Vesper, Xcode
 
 **File Explorer**
 - Catppuccin icon theme (Material Icon Theme resolver)
