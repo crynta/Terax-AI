@@ -4,8 +4,30 @@
 # which propagates through the rest of init and ultimately into the first
 # prompt's `%?` (rendering robbyrussell's `➜` red on a clean shell start).
 {
-  _terax_user_zdotdir="${TERAX_USER_ZDOTDIR:-$HOME}"
+  _terax_wrapper_zdotdir="${ZDOTDIR:-}"
+  _terax_had_wrapper_zdotdir=0
+  [ -n "${ZDOTDIR+x}" ] && _terax_had_wrapper_zdotdir=1
+
+  if [ -n "${TERAX_USER_ZDOTDIR+x}" ]; then
+    export ZDOTDIR="$TERAX_USER_ZDOTDIR"
+  else
+    unset ZDOTDIR
+  fi
+
+  _terax_user_zdotdir="${ZDOTDIR:-$HOME}"
   [ -f "$_terax_user_zdotdir/.zshenv" ] && source "$_terax_user_zdotdir/.zshenv"
-  unset _terax_user_zdotdir
+
+  if [ -n "${ZDOTDIR+x}" ]; then
+    export TERAX_USER_ZDOTDIR="$ZDOTDIR"
+  else
+    unset TERAX_USER_ZDOTDIR
+  fi
+
+  if [ "$_terax_had_wrapper_zdotdir" = 1 ]; then
+    export ZDOTDIR="$_terax_wrapper_zdotdir"
+  else
+    unset ZDOTDIR
+  fi
+  unset _terax_wrapper_zdotdir _terax_had_wrapper_zdotdir _terax_user_zdotdir
 }
 :
