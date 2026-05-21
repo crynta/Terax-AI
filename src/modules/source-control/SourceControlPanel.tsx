@@ -21,6 +21,7 @@ import {
 import { IS_MAC } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { fileIconUrl } from "@/modules/explorer/lib/iconResolver";
+import { useI18n } from "@/modules/i18n";
 import {
   AiContentGenerator02Icon,
   Alert02Icon,
@@ -132,6 +133,7 @@ export const SourceControlPanel = memo(function SourceControlPanel({
   onOpenGitGraph,
   onOpenDiff,
 }: Props) {
+  const { t } = useI18n();
   const scm = useSourceControlPanel(open, sourceControl, onOpenDiff);
   const refreshAnimationRef = useRef<number | null>(null);
   const [refreshAnimating, setRefreshAnimating] = useState(false);
@@ -442,7 +444,7 @@ export const SourceControlPanel = memo(function SourceControlPanel({
           </div>
           <div className="flex shrink-0 items-center gap-0.5">
             <IconActionButton
-              label={fetchBusy ? "Fetching…" : "Fetch from remote"}
+              label={fetchBusy ? t("Fetching…") : t("Fetch from remote")}
               disabled={!canFetch}
               onClick={handleFetch}
               side="bottom"
@@ -460,14 +462,14 @@ export const SourceControlPanel = memo(function SourceControlPanel({
             <IconActionButton
               label={
                 pullBusy
-                  ? "Pulling…"
+                  ? t("Pulling…")
                   : isDiverged
-                    ? "Branch diverged — resolve in terminal"
+                    ? t("Branch diverged — resolve in terminal")
                     : !hasUpstream
-                      ? "No upstream configured"
+                      ? t("No upstream configured")
                       : (scm.status?.behind ?? 0) === 0
-                        ? "Already up to date"
-                        : `Pull ${scm.status?.behind ?? 0} commits (fast-forward)`
+                        ? t("Already up to date")
+                        : t("Pull {{count}} commits (fast-forward)", { count: scm.status?.behind ?? 0 })
               }
               disabled={!canPull}
               onClick={handlePull}
@@ -484,7 +486,7 @@ export const SourceControlPanel = memo(function SourceControlPanel({
               )}
             </IconActionButton>
             <IconActionButton
-              label="Refresh source control"
+              label={t("Refresh source control")}
               disabled={isRefreshing || !!scm.actionBusy}
               onClick={handleRefresh}
               side="bottom"
@@ -515,7 +517,9 @@ export const SourceControlPanel = memo(function SourceControlPanel({
               strokeWidth={1.85}
               className="shrink-0"
             />
-            <span className="flex-1 text-[12px] font-medium">Commit Graph</span>
+            <span className="flex-1 text-[12px] font-medium">
+              {t("Commit Graph")}
+            </span>
             <HugeiconsIcon
               icon={ArrowRight01Icon}
               size={12}
@@ -526,23 +530,23 @@ export const SourceControlPanel = memo(function SourceControlPanel({
         ) : null}
 
         {scm.panelState === "loading" ? (
-          <PanelCenter title="Loading repository" />
+          <PanelCenter title={t("Loading repository")} />
         ) : null}
 
         {scm.panelState === "no-repo" ? (
           <PanelCenter
-            title="No repository"
-            body="The active workspace is not inside a Git repository."
+            title={t("No repository")}
+            body={t("The active workspace is not inside a Git repository.")}
           />
         ) : null}
 
         {scm.panelState === "error" ? (
           <PanelCenter
-            title="Source control error"
-            body={scm.statusError ?? "Unknown source control error"}
+            title={t("Source control error")}
+            body={scm.statusError ?? t("Unknown source control error")}
             action={
               <Button size="sm" onClick={() => void scm.refresh()}>
-                Retry
+                {t("Retry")}
               </Button>
             }
           />
@@ -564,7 +568,7 @@ export const SourceControlPanel = memo(function SourceControlPanel({
                   value={scm.commitMessage}
                   onChange={(event) => scm.setCommitMessage(event.target.value)}
                   onKeyDown={handleCommitShortcut}
-                  placeholder="Commit message"
+                  placeholder={t("Commit message")}
                   rows={3}
                   className={cn(
                     "min-h-[72px] border-  resize-none rounded-lg  bg-transparent px-3 pb-7 pt-2.5 text-[12.5px] leading-snug shadow-none placeholder:text-muted-foreground/65 focus-visible:ring-0 focus:border-0",
@@ -575,7 +579,7 @@ export const SourceControlPanel = memo(function SourceControlPanel({
                     <span>Ch: {scm.commitMessage.length}</span>
                   ) : (
                     <span className="flex gap-2 items-center">
-                      {commitShortcut} <p>to commit</p>
+                      {commitShortcut} <p>{t("to commit")}</p>
                     </span>
                   )}
                 </div>
@@ -694,7 +698,7 @@ export const SourceControlPanel = memo(function SourceControlPanel({
                 ref={containerRef}
                 tabIndex={0}
                 role="listbox"
-                aria-label="Changed files"
+                aria-label={t("Changed files")}
                 aria-activedescendant={
                   focusedRowKey ? `scm-row-${focusedRowKey}` : undefined
                 }
@@ -758,21 +762,21 @@ export const SourceControlPanel = memo(function SourceControlPanel({
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Discard changes?</AlertDialogTitle>
+            <AlertDialogTitle>{t("Discard changes?")}</AlertDialogTitle>
             <AlertDialogDescription>
               {scm.pendingDiscard?.scope === "all"
-                ? `This will discard ${scm.pendingDiscard.label} and cannot be undone.`
+                ? t("This will discard {{label}} and cannot be undone.", { label: scm.pendingDiscard.label })
                 : scm.pendingDiscard
-                  ? `Discard changes in "${scm.pendingDiscard.label}"? This cannot be undone.`
+                  ? t('Discard changes in "{{label}}"? This cannot be undone.', { label: scm.pendingDiscard.label })
                   : null}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel onClick={() => scm.cancelPendingDiscard()}>
-              Cancel
+              {t("Cancel")}
             </AlertDialogCancel>
             <AlertDialogAction onClick={() => void scm.confirmPendingDiscard()}>
-              Discard
+              {t("Discard")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -804,6 +808,7 @@ function PanelCenter({
 }
 
 function CleanTreeHint({ repoLabel }: { repoLabel: string }) {
+  const { t } = useI18n();
   return (
     <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-1.5 px-4 text-center">
       <div className="flex size-8 items-center justify-center rounded-full border border-border/55 text-muted-foreground">
@@ -814,7 +819,7 @@ function CleanTreeHint({ repoLabel }: { repoLabel: string }) {
         />
       </div>
       <div className="text-[12px] font-medium text-foreground">
-        Working tree clean
+        {t("Working tree clean")}
       </div>
       <div className="text-[10.5px] leading-snug text-muted-foreground">
         on <span className="font-mono text-foreground/80">{repoLabel}</span>
@@ -849,6 +854,7 @@ const RowRenderer = memo(function RowRenderer(props: RowRendererProps) {
 });
 
 function DivergedBanner() {
+  const { t } = useI18n();
   return (
     <div className="mx-2 mt-1 flex h-7 items-center gap-1.5 rounded-md border border-border/60 bg-foreground/[0.04] px-2 text-[10.5px] leading-none text-muted-foreground">
       <HugeiconsIcon
@@ -859,9 +865,9 @@ function DivergedBanner() {
       />
       <span className="min-w-0 flex-1 truncate">
         <span className="font-medium text-foreground/85">
-          Diverged from upstream
+          {t("Diverged from upstream")}
         </span>
-        <span className="ml-1 opacity-75">— resolve in terminal</span>
+        <span className="ml-1 opacity-75">{t("— resolve in terminal")}</span>
       </span>
     </div>
   );
@@ -875,18 +881,19 @@ function ListHeader({
 }: RowRendererProps & {
   row: Extract<RowDescriptor, { kind: "list-header" }>;
 }) {
+  const { t } = useI18n();
   return (
     <div className="flex h-7 items-center gap-2 px-3">
       <span className="text-[10.5px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/85">
-        Changes
+        {t("Changes")}
       </span>
       <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full border border-border/60 px-1 text-[9.5px] font-semibold tabular-nums text-muted-foreground">
         {row.count}
       </span>
       <label className="ml-auto flex shrink-0 cursor-pointer select-none items-center gap-1.5 text-[10.5px] font-medium text-muted-foreground hover:text-foreground">
-        <span>All</span>
+        <span>{t("All")}</span>
         <Checkbox
-          aria-label="Stage all changes"
+          aria-label={t("Stage all changes")}
           checked={checkboxValue(headerCheckState)}
           disabled={actionBusy !== null}
           onCheckedChange={() => void onToggleAll()}

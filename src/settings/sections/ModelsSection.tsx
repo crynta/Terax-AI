@@ -10,6 +10,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/modules/i18n";
 import {
   MODELS,
   PROVIDERS,
@@ -102,6 +103,7 @@ const LOCAL_META: Partial<Record<ProviderId, LocalMeta>> = {
 };
 
 export function ModelsSection() {
+  const { t } = useI18n();
   const [keys, setKeys] = useState<KeysMap | null>(null);
   const [adding, setAdding] = useState<Set<ProviderId>>(new Set());
 
@@ -181,7 +183,7 @@ export function ModelsSection() {
   };
 
   if (!keys) {
-    return <div className="text-[12px] text-muted-foreground">Loading…</div>;
+    return <div className="text-[12px] text-muted-foreground">{t("Loading…")}</div>;
   }
 
   const configuredIds = new Set(
@@ -217,8 +219,8 @@ export function ModelsSection() {
   return (
     <div className="flex flex-col gap-7">
       <SectionHeader
-        title="Models"
-        description="Connect the providers you use. Keys live in your OS keychain and are used only by Terax."
+        title={t("Models")}
+        description={t("Connect the providers you use. Keys live in your OS keychain and are used only by Terax.")}
       />
 
       <DefaultsBlock
@@ -229,7 +231,7 @@ export function ModelsSection() {
 
       <div className="flex flex-col gap-3">
         <div className="flex items-center justify-between">
-          <Label>Providers</Label>
+          <Label>{t("Providers")}</Label>
           <AddProviderMenu
             providers={addableProviders}
             onAdd={addProvider}
@@ -239,10 +241,10 @@ export function ModelsSection() {
         {visibleProviders.length === 0 ? (
           <div className="rounded-lg border border-dashed border-border/60 bg-card/40 px-4 py-8 text-center">
             <p className="text-[12px] text-muted-foreground">
-              No providers connected yet.
+              {t("No providers connected yet.")}
             </p>
             <p className="mt-0.5 text-[10.5px] text-muted-foreground/70">
-              Click “Add provider” to connect a cloud or local model source.
+              {t('Click "Add provider" to connect a cloud or local model source.')}
             </p>
           </div>
         ) : (
@@ -294,6 +296,7 @@ function AddProviderMenu({
   providers: readonly ProviderInfo[];
   onAdd: (id: ProviderId) => void;
 }) {
+  const { t } = useI18n();
   const cloud = providers.filter((p) => !isLocalProvider(p.id));
   const local = providers.filter((p) => isLocalProvider(p.id));
   const disabled = providers.length === 0;
@@ -308,14 +311,14 @@ function AddProviderMenu({
           className="h-7 gap-1.5 px-2.5 text-[11px]"
         >
           <HugeiconsIcon icon={Add01Icon} size={12} strokeWidth={2} />
-          Add provider
+          {t("Add provider")}
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="min-w-55 p-1">
         {cloud.length > 0 ? (
           <>
             <DropdownMenuLabel className="px-2 text-[10px] tracking-wide text-muted-foreground uppercase">
-              Cloud
+              {t("Cloud")}
             </DropdownMenuLabel>
             {cloud.map((p) => (
               <ProviderMenuItem key={p.id} provider={p} onAdd={onAdd} />
@@ -325,7 +328,7 @@ function AddProviderMenu({
         {local.length > 0 ? (
           <>
             <DropdownMenuLabel className="px-2 text-[10px] tracking-wide text-muted-foreground uppercase">
-              Local & custom
+              {t("Local & custom")}
             </DropdownMenuLabel>
             {local.map((p) => (
               <ProviderMenuItem key={p.id} provider={p} onAdd={onAdd} />
@@ -364,11 +367,13 @@ function DefaultsBlock({
   configuredIds: Set<ProviderId>;
   keys: KeysMap;
 }) {
+  const { t } = useI18n();
+
   return (
     <div className="flex flex-col gap-3">
-      <Label>Defaults</Label>
+      <Label>{t("Defaults")}</Label>
       <div className="flex flex-col gap-2.5 rounded-lg border border-border/60 bg-card/60 px-3 py-2.5">
-        <FieldRow label="Chat model">
+        <FieldRow label={t("Chat model")}>
           <DefaultModelPicker
             defaultModel={defaultModel}
             configuredIds={configuredIds}
@@ -380,80 +385,6 @@ function DefaultsBlock({
   );
 }
 
-function DefaultModelPicker({
-  defaultModel,
-  configuredIds,
-}: {
-  defaultModel: ModelId;
-  configuredIds: Set<ProviderId>;
-}) {
-  const m = getModel(defaultModel);
-  const hasAny = configuredIds.size > 0;
-
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button
-          variant="outline"
-          disabled={!hasAny}
-          className="h-8 flex-1 justify-between gap-2 px-2.5 text-[11.5px]"
-        >
-          <span className="flex items-center gap-2 truncate">
-            <ProviderIcon provider={m.provider} size={13} />
-            <span className="truncate">{m.label}</span>
-            <span className="text-muted-foreground">· {m.hint}</span>
-          </span>
-          <HugeiconsIcon
-            icon={ArrowDown01Icon}
-            size={11}
-            strokeWidth={2}
-            className="opacity-70"
-          />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent
-        align="start"
-        side="bottom"
-        sideOffset={6}
-        collisionPadding={12}
-        className="min-w-70 p-1"
-      >
-        <div className="max-h-72 overflow-y-auto overscroll-contain pr-1">
-          {PROVIDERS.filter((p) => configuredIds.has(p.id)).map((p) => {
-            const models = MODELS.filter((x) => x.provider === p.id);
-            if (models.length === 0) return null;
-            return (
-              <div key={p.id} className="px-1 pt-1.5 first:pt-1">
-                <div className="mb-0.5 flex items-center gap-1.5 px-2 text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
-                  <ProviderIcon provider={p.id} size={11} />
-                  <span>{p.label}</span>
-                </div>
-                {models.map((mod) => (
-                  <DropdownMenuItem
-                    key={mod.id}
-                    onSelect={() => void setDefaultModel(mod.id as ModelId)}
-                    className={cn(
-                      "flex items-start gap-2 text-[12px]",
-                      mod.id === defaultModel && "bg-accent/50",
-                    )}
-                  >
-                    <span className="flex flex-1 flex-col">
-                      <span>{mod.label}</span>
-                      <span className="text-[10px] text-muted-foreground">
-                        {mod.description}
-                      </span>
-                    </span>
-                  </DropdownMenuItem>
-                ))}
-              </div>
-            );
-          })}
-        </div>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
 function AutocompleteRow({
   keys,
   configuredIds,
@@ -461,12 +392,12 @@ function AutocompleteRow({
   keys: KeysMap;
   configuredIds: Set<ProviderId>;
 }) {
+  const { t } = useI18n();
   const enabled = usePreferencesStore((s) => s.autocompleteEnabled);
   const provider = usePreferencesStore((s) => s.autocompleteProvider);
   const modelId = usePreferencesStore((s) => s.autocompleteModelId);
   const eligible = useMemo(() => getAutocompleteEligibleModels(), []);
 
-  // Fast cloud tiers + any configured local provider (one model id each).
   const items = useMemo(() => {
     const local = PROVIDERS.filter(
       (p) => isLocalProvider(p.id) && configuredIds.has(p.id),
@@ -507,7 +438,7 @@ function AutocompleteRow({
 
   return (
     <>
-      <FieldRow label="Autocomplete">
+      <FieldRow label={t("Autocomplete")}>
         <div className="flex flex-1 items-center gap-2">
           <Switch
             checked={enabled}
@@ -524,7 +455,7 @@ function AutocompleteRow({
                   <ProviderIcon provider={currentModel.provider} size={12} />
                   <span className="truncate">{currentModel.label}</span>
                   <span className="text-muted-foreground">
-                    · {currentModel.hint}
+                    · {t(currentModel.hint)}
                   </span>
                 </span>
                 <HugeiconsIcon
@@ -551,7 +482,7 @@ function AutocompleteRow({
                       <span>{p.label}</span>
                       {!pConfigured ? (
                         <span className="ml-auto text-[9.5px] normal-case tracking-normal text-muted-foreground/70">
-                          not connected
+                          {t("not connected")}
                         </span>
                       ) : null}
                     </div>
@@ -568,7 +499,7 @@ function AutocompleteRow({
                         <span className="flex flex-col">
                           <span>{m.label}</span>
                           <span className="text-[10px] text-muted-foreground">
-                            {m.description}
+                            {t(m.description)}
                           </span>
                         </span>
                       </DropdownMenuItem>
@@ -582,10 +513,87 @@ function AutocompleteRow({
       </FieldRow>
       {enabled && !hasKey ? (
         <p className="pl-19 text-[10.5px] text-muted-foreground">
-          {getProvider(provider).label} isn't connected — add it below.
+          {t("{{provider}} isn't connected — add it below.", {
+            provider: getProvider(provider).label,
+          })}
         </p>
       ) : null}
     </>
+  );
+}
+
+function DefaultModelPicker({
+  defaultModel,
+  configuredIds,
+}: {
+  defaultModel: ModelId;
+  configuredIds: Set<ProviderId>;
+}) {
+  const { t } = useI18n();
+  const m = getModel(defaultModel);
+  const hasAny = configuredIds.size > 0;
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="outline"
+          disabled={!hasAny}
+          className="h-8 flex-1 justify-between gap-2 px-2.5 text-[11.5px]"
+        >
+          <span className="flex items-center gap-2 truncate">
+            <ProviderIcon provider={m.provider} size={13} />
+            <span className="truncate">{m.label}</span>
+            <span className="text-muted-foreground">· {t(m.hint)}</span>
+          </span>
+          <HugeiconsIcon
+            icon={ArrowDown01Icon}
+            size={11}
+            strokeWidth={2}
+            className="opacity-70"
+          />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align="start"
+        side="bottom"
+        sideOffset={6}
+        collisionPadding={12}
+        className="min-w-70 p-1"
+      >
+        <div className="max-h-72 overflow-y-auto overscroll-contain pr-1">
+          {PROVIDERS.filter((p) => configuredIds.has(p.id)).map((p) => {
+            const models = MODELS.filter((x) => x.provider === p.id);
+            if (models.length === 0) return null;
+            return (
+              <div key={p.id} className="px-1 pt-1.5 first:pt-1">
+                <div className="mb-0.5 flex items-center gap-1.5 px-2 text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
+                  <ProviderIcon provider={p.id} size={11} />
+                  <span>{p.label}</span>
+                </div>
+                {models.map((mod) => (
+                  <DropdownMenuItem
+                    key={mod.id}
+                    onSelect={() => void setDefaultModel(mod.id as ModelId)}
+                    className={cn(
+                      "flex items-start gap-2 text-[12px]",
+                      mod.id === defaultModel && "bg-accent/50",
+                    )}
+                  >
+                    <span className="flex flex-1 flex-col">
+                      <span>{mod.label}</span>
+                      <span className="text-[10px] text-muted-foreground">
+                        {t(mod.description)}
+                      </span>
+                    </span>
+                  </DropdownMenuItem>
+                ))}
+              </div>
+            );
+          })}
+        </div>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -608,6 +616,7 @@ function LocalProviderCard({
   onClearKey: () => Promise<void>;
   onRemove: () => void;
 }) {
+  const { t } = useI18n();
   const { baseURL, modelId, setBaseURL, setModelId, contextLimit, setContextLimit } =
     config;
   const [urlDraft, setUrlDraft] = useState(baseURL);
@@ -645,7 +654,7 @@ function LocalProviderCard({
             className="ml-1 h-4 gap-1 border-border/60 bg-muted/40 px-1.5 text-[10px] font-normal text-muted-foreground"
           >
             <HugeiconsIcon icon={CheckmarkCircle02Icon} size={9} strokeWidth={2} />
-            Connected
+            {t("Connected")}
           </Badge>
         ) : null}
         <button
@@ -653,14 +662,14 @@ function LocalProviderCard({
           onClick={() => void openUrl(provider.consoleUrl)}
           className="ml-auto inline-flex items-center gap-0.5 text-[10.5px] text-muted-foreground transition-colors hover:text-foreground"
         >
-          Docs
+          {t("Docs")}
           <HugeiconsIcon icon={ArrowUpRight01Icon} size={11} strokeWidth={1.75} />
         </button>
         <Button
           size="icon"
           variant="ghost"
           onClick={onRemove}
-          title="Remove provider"
+          title={t("Remove provider")}
           className="size-7 text-muted-foreground hover:text-destructive"
         >
           <HugeiconsIcon icon={Cancel01Icon} size={12} strokeWidth={1.75} />
@@ -668,11 +677,11 @@ function LocalProviderCard({
       </div>
 
       <span className="text-[10.5px] leading-relaxed text-muted-foreground">
-        {meta.description}
+        {t(meta.description)}
       </span>
 
       <div className="mt-0.5 flex flex-col gap-2.5">
-        <FieldRow label="Base URL">
+        <FieldRow label={t("Base URL")}>
           <div className="flex flex-1 gap-1.5">
             <Input
               value={urlDraft}
@@ -692,12 +701,12 @@ function LocalProviderCard({
               disabled={!urlDraft.trim()}
               className="h-8 px-3 text-[11px]"
             >
-              Test
+              {t("Test")}
             </Button>
           </div>
         </FieldRow>
 
-        <FieldRow label="Model ID">
+        <FieldRow label={t("Model ID")}>
           <Input
             value={modelDraft}
             onChange={(e) => setModelDraft(e.target.value)}
@@ -712,7 +721,7 @@ function LocalProviderCard({
         </FieldRow>
 
         {setContextLimit ? (
-          <FieldRow label="Context">
+          <FieldRow label={t("Context")}>
             <div className="flex flex-1 items-center gap-1.5">
               <Input
                 value={contextDraft}
@@ -726,13 +735,13 @@ function LocalProviderCard({
                 spellCheck={false}
                 className="h-8 w-28 font-mono text-[11.5px]"
               />
-              <span className="text-[10.5px] text-muted-foreground">tokens</span>
+              <span className="text-[10.5px] text-muted-foreground">{t("tokens")}</span>
             </div>
           </FieldRow>
         ) : null}
 
         {supportsKey ? (
-          <FieldRow label="API key">
+          <FieldRow label={t("API key")}>
             {compatKey ? (
               <div className="flex flex-1 items-center gap-1.5">
                 <code className="flex-1 truncate rounded bg-muted/40 px-2 py-1 font-mono text-[11px] text-muted-foreground">
@@ -742,7 +751,7 @@ function LocalProviderCard({
                   size="icon"
                   variant="ghost"
                   onClick={() => void onClearKey()}
-                  title="Remove key"
+                  title={t("Remove key")}
                   className="size-7 text-muted-foreground hover:text-destructive"
                 >
                   <HugeiconsIcon icon={Cancel01Icon} size={12} strokeWidth={1.75} />
@@ -754,7 +763,7 @@ function LocalProviderCard({
                   type="password"
                   value={keyDraft}
                   onChange={(e) => setKeyDraft(e.target.value)}
-                  placeholder="Optional — leave empty for unauthenticated endpoints"
+                  placeholder={t("Optional — leave empty for unauthenticated endpoints")}
                   spellCheck={false}
                   className="h-8 flex-1 font-mono text-[11.5px]"
                 />
@@ -769,7 +778,7 @@ function LocalProviderCard({
                   disabled={!keyDraft.trim()}
                   className="h-8 px-3 text-[11px]"
                 >
-                  Save
+                  {t("Save")}
                 </Button>
               </div>
             )}
@@ -810,23 +819,24 @@ function StatusLine({
 }: {
   status: "idle" | "testing" | "ok" | "fail";
 }) {
+  const { t } = useI18n();
   if (status === "idle") return null;
   if (status === "testing") {
     return (
-      <span className="text-[10.5px] text-muted-foreground">Testing…</span>
+      <span className="text-[10.5px] text-muted-foreground">{t("Testing…")}</span>
     );
   }
   if (status === "ok") {
     return (
       <span className="flex items-center gap-1 text-[10.5px] text-muted-foreground">
         <HugeiconsIcon icon={CheckmarkCircle02Icon} size={11} strokeWidth={2} />
-        Reachable — server responded.
+        {t("Reachable — server responded.")}
       </span>
     );
   }
   return (
     <span className="text-[10.5px] text-destructive/80">
-      Could not reach the server.
+      {t("Could not reach the server.")}
     </span>
   );
 }

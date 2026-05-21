@@ -13,6 +13,7 @@ import {
   type GitLogEntry,
 } from "@/modules/ai/lib/native";
 import { fileIconUrl } from "@/modules/explorer/lib/iconResolver";
+import { useI18n } from "@/modules/i18n";
 import {
   Copy01Icon,
   File02Icon,
@@ -194,6 +195,7 @@ export function GitHistoryPane({
   onOpenCommitFile,
   onSearchHandle,
 }: Props) {
+  const { t } = useI18n();
   const [commits, setCommits] = useState<GitLogEntry[]>([]);
   const [loadStatus, setLoadStatus] = useState<LoadStatus>("idle");
   const [error, setError] = useState<string | null>(null);
@@ -511,26 +513,26 @@ export function GitHistoryPane({
           <CenterPlaceholder>
             <Spinner className="size-4" />
             <span className="text-[11.5px] text-muted-foreground">
-              Loading commits…
+              {t("Loading commits…")}
             </span>
           </CenterPlaceholder>
         ) : loadStatus === "error" && commits.length === 0 ? (
           <CenterPlaceholder>
             <div className="text-[13px] font-medium">
-              Could not load history
+              {t("Could not load history")}
             </div>
             <div className="max-w-md text-[11px] leading-relaxed text-muted-foreground">
-              {error ?? "Unknown error"}
+              {error ?? t("Unknown error")}
             </div>
             <Button size="sm" onClick={handleRefresh}>
-              Retry
+              {t("Retry")}
             </Button>
           </CenterPlaceholder>
         ) : commits.length === 0 ? (
           <CenterPlaceholder>
-            <div className="text-[13px] font-medium">No commits yet</div>
+            <div className="text-[13px] font-medium">{t("No commits yet")}</div>
             <div className="max-w-md text-[11px] leading-relaxed text-muted-foreground">
-              This branch has no commits.
+              {t("This branch has no commits.")}
             </div>
           </CenterPlaceholder>
         ) : (
@@ -543,12 +545,12 @@ export function GitHistoryPane({
               }}
             >
               <div />
-              <div className="pl-px">SHA</div>
-              <div className="min-w-0">Subject</div>
+              <div className="pl-px">{t("SHA")}</div>
+              <div className="min-w-0">{t("Subject")}</div>
               <div />
-              <div className="ml-2">Author</div>
-              <div className="text-right">Date</div>
-              <div className="text-right">Changes</div>
+              <div className="ml-2">{t("Author")}</div>
+              <div className="text-right">{t("Date")}</div>
+              <div className="text-right">{t("Changes")}</div>
             </div>
             <div
               ref={scrollRef}

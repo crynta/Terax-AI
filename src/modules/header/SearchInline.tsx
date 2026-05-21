@@ -2,6 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { KEY_SEP } from "@/lib/platform";
 import type { EditorPaneHandle } from "@/modules/editor";
+import { useI18n } from "@/modules/i18n";
 import { usePreferencesStore } from "@/modules/settings/preferences";
 import { getBindingTokens, SHORTCUTS } from "@/modules/shortcuts/shortcuts";
 import { Cancel01Icon, Search01Icon } from "@hugeicons/core-free-icons";
@@ -46,6 +47,7 @@ type Props = {
 export const SearchInline = forwardRef<SearchInlineHandle, Props>(
   function SearchInline({ target, compact }, ref) {
     const [q, setQ] = useState("");
+    const { t } = useI18n();
     // In compact mode the field is hidden behind an icon until activated.
     // In normal mode the field is always present.
     const [openInCompact, setOpenInCompact] = useState(false);
@@ -69,7 +71,7 @@ export const SearchInline = forwardRef<SearchInlineHandle, Props>(
       return tokens.join(KEY_SEP);
     }, [userShortcuts]);
 
-    const baseLabel = target?.kind === "git-history" ? "Git search" : "Search";
+    const baseLabel = target?.kind === "git-history" ? t("Git search") : t("Search");
 
     const placeholder = useMemo(() => {
       return shortcutText ? `${baseLabel} (${shortcutText})` : baseLabel;
@@ -194,7 +196,7 @@ export const SearchInline = forwardRef<SearchInlineHandle, Props>(
                     inputRef.current?.focus();
                   }}
                   className="absolute top-1/2 right-1.5 -translate-y-1/2 rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
-                  aria-label="Clear search"
+                  aria-label={t("Clear search")}
                 >
                   <HugeiconsIcon
                     icon={Cancel01Icon}

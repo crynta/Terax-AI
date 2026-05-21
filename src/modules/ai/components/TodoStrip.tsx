@@ -1,6 +1,7 @@
 import { Progress } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Spinner } from "@/components/ui/spinner";
+import { useI18n } from "@/modules/i18n";
 import {
   Tooltip,
   TooltipContent,
@@ -19,6 +20,7 @@ type Props = { sessionId: string | null };
 const EMPTY_TODOS: Todo[] = [];
 
 export function TodoStrip({ sessionId }: Props) {
+  const { t } = useI18n();
   const hydrate = useTodosStore((s) => s.hydrate);
   const todos =
     useTodosStore((s) => (sessionId ? s.bySession[sessionId] : undefined)) ??
@@ -36,7 +38,7 @@ export function TodoStrip({ sessionId }: Props) {
   return (
     <div className="flex flex-col min-h-0 shrink-0 border-t-2 border-border/40 bg-muted/80 px-3 py-1.5 h-[35%] shadow-[0_-4px_12px_-8px_rgba(0,0,0,0.2)]">
       <div className="my-1.5 flex items-center gap-2 shrink-0">
-        <span className="text-[11px] font-medium text-foreground">Todos</span>
+        <span className="text-[11px] font-medium text-foreground">{t("Todos")}</span>
         <Progress value={pct} className="h-1 flex-1" />
         <span className="text-[11px] tabular-nums font-mono text-muted-foreground">
           {completed}/{todos.length}
