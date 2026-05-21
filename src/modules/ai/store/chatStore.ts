@@ -257,6 +257,10 @@ function makeChat(sessionId: string): Chat<UIMessage> {
       usePreferencesStore.getState().openaiCompatibleModelId,
     getOpenaiCompatibleContextLimit: () =>
       usePreferencesStore.getState().openaiCompatibleContextLimit,
+    getNvidiaNimBaseURL: () =>
+      usePreferencesStore.getState().nvidiaNimBaseURL,
+    getNvidiaNimModelId: () =>
+      usePreferencesStore.getState().nvidiaNimModelId,
     onStep: (step) => {
       useChatStore.getState().patchAgentMeta({ step });
     },

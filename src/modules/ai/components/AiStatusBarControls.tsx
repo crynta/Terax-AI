@@ -68,6 +68,7 @@ const PROVIDER_ICON = {
   deepseek: DeepseekIcon,
   mistral: MistralIcon,
   openrouter: GlobeIcon,
+  "nvidia-nim": ServerStack01Icon,
   "openai-compatible": PlugIcon,
   lmstudio: ComputerIcon,
   mlx: AppleIcon,
