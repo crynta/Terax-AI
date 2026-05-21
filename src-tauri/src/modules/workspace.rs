@@ -10,6 +10,12 @@ use serde::{Deserialize, Serialize};
 const CANONICAL_TTL: Duration = Duration::from_secs(1);
 const CANONICAL_CACHE_CAP: usize = 256;
 
+fn strip_extended_prefix(p: &Path) -> PathBuf {
+    let s = p.to_string_lossy().to_string();
+    let s = s.strip_prefix(r"\\?\").unwrap_or(&s);
+    PathBuf::from(s)
+}
+
 struct CanonicalEntry {
     canonical: PathBuf,
     inserted_at: Instant,
@@ -24,9 +30,10 @@ pub struct WorkspaceRegistry {
 impl WorkspaceRegistry {
     pub fn authorize<P: AsRef<Path>>(&self, path: P) -> std::io::Result<PathBuf> {
         let canonical = std::fs::canonicalize(path.as_ref())?;
+        let clean = strip_extended_prefix(&canonical);
         let mut set = self.roots.lock().expect("workspace registry poisoned");
-        set.insert(canonical.clone());
-        Ok(canonical)
+        set.insert(clean.clone());
+        Ok(clean)
     }
 
     pub fn is_authorized(&self, target: &Path) -> bool {
@@ -45,6 +52,7 @@ impl WorkspaceRegistry {
             }
         }
         let canonical = std::fs::canonicalize(&key)?;
+        let clean = strip_extended_prefix(&canonical);
         let mut cache = self.canonical_cache.lock().expect("canonical cache poisoned");
         if cache.len() >= CANONICAL_CACHE_CAP {
             cache.retain(|_, entry| entry.inserted_at.elapsed() < CANONICAL_TTL);
@@ -55,11 +63,11 @@ impl WorkspaceRegistry {
         cache.insert(
             key,
             CanonicalEntry {
-                canonical: canonical.clone(),
+                canonical: clean.clone(),
                 inserted_at: Instant::now(),
             },
         );
-        Ok(canonical)
+        Ok(clean)
     }
 
 }
@@ -77,16 +85,17 @@ pub fn authorize_spawn_cwd(
     let resolved = resolve_path(cwd, workspace);
     let canonical = std::fs::canonicalize(&resolved)
         .map_err(|e| format!("cwd not accessible: {e}"))?;
-    if !canonical.is_dir() {
-        return Err(format!("cwd is not a directory: {}", canonical.display()));
+    let clean = strip_extended_prefix(&canonical);
+    if !clean.is_dir() {
+        return Err(format!("cwd is not a directory: {}", clean.display()));
     }
-    if !registry.is_authorized(&canonical) {
+    if !registry.is_authorized(&clean) {
         return Err(format!(
             "cwd is outside the authorized workspace: {}",
-            canonical.display()
+            clean.display()
         ));
     }
-    Ok(Some(canonical))
+    Ok(Some(clean))
 }
 
 pub fn bootstrap_registry(registry: &WorkspaceRegistry) {
