@@ -2,6 +2,7 @@ use std::path::PathBuf;
 
 use portable_pty::CommandBuilder;
 
+use crate::modules::ssh;
 use crate::modules::workspace::{self, WorkspaceEnv};
 
 #[cfg(windows)]
@@ -51,6 +52,13 @@ pub fn build_command(
     cwd: Option<String>,
     workspace: WorkspaceEnv,
 ) -> Result<CommandBuilder, String> {
+    if let Some(raw_cwd) = cwd.as_deref() {
+        if raw_cwd.starts_with("ssh://") {
+            let _ = workspace;
+            return ssh::build_command_from_url(raw_cwd);
+        }
+    }
+
     #[cfg(unix)]
     {
         let _ = workspace;
@@ -300,7 +308,9 @@ mod windows {
             zdotdir: String,
             user_zdotdir: Option<String>,
         },
-        Bash { rcfile: String },
+        Bash {
+            rcfile: String,
+        },
         Fish,
         None,
     }

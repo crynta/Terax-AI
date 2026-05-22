@@ -19,7 +19,15 @@ fn parse_launch_dir() -> Option<String> {
         if arg.starts_with('-') {
             continue;
         }
-        let Ok(canon) = std::fs::canonicalize(&arg) else { continue };
+        if arg.starts_with("ssh://") {
+            if modules::ssh::parse_ssh_url(&arg).is_ok() {
+                return Some(arg);
+            }
+            continue;
+        }
+        let Ok(canon) = std::fs::canonicalize(&arg) else {
+            continue;
+        };
         if !canon.is_dir() {
             continue;
         }

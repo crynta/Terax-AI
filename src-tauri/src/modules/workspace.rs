@@ -37,7 +37,10 @@ impl WorkspaceRegistry {
     pub fn canonicalize_cached<P: AsRef<Path>>(&self, path: P) -> std::io::Result<PathBuf> {
         let key = path.as_ref().to_path_buf();
         {
-            let cache = self.canonical_cache.lock().expect("canonical cache poisoned");
+            let cache = self
+                .canonical_cache
+                .lock()
+                .expect("canonical cache poisoned");
             if let Some(entry) = cache.get(&key) {
                 if entry.inserted_at.elapsed() < CANONICAL_TTL {
                     return Ok(entry.canonical.clone());
@@ -45,7 +48,10 @@ impl WorkspaceRegistry {
             }
         }
         let canonical = std::fs::canonicalize(&key)?;
-        let mut cache = self.canonical_cache.lock().expect("canonical cache poisoned");
+        let mut cache = self
+            .canonical_cache
+            .lock()
+            .expect("canonical cache poisoned");
         if cache.len() >= CANONICAL_CACHE_CAP {
             cache.retain(|_, entry| entry.inserted_at.elapsed() < CANONICAL_TTL);
             if cache.len() >= CANONICAL_CACHE_CAP {
@@ -61,7 +67,6 @@ impl WorkspaceRegistry {
         );
         Ok(canonical)
     }
-
 }
 
 // `None` means "use bootstrapped default". `Some` is canonicalized to defeat
@@ -74,9 +79,14 @@ pub fn authorize_spawn_cwd(
     let Some(cwd) = cwd.map(str::trim).filter(|s| !s.is_empty()) else {
         return Ok(None);
     };
+    if cwd.starts_with("ssh://") {
+        crate::modules::ssh::parse_ssh_url(cwd)
+            .map_err(|e| format!("invalid SSH workspace: {e}"))?;
+        return Ok(None);
+    }
     let resolved = resolve_path(cwd, workspace);
-    let canonical = std::fs::canonicalize(&resolved)
-        .map_err(|e| format!("cwd not accessible: {e}"))?;
+    let canonical =
+        std::fs::canonicalize(&resolved).map_err(|e| format!("cwd not accessible: {e}"))?;
     if !canonical.is_dir() {
         return Err(format!("cwd is not a directory: {}", canonical.display()));
     }
@@ -137,7 +147,10 @@ fn resolve_launch_dir() -> PathBuf {
     if let Some(cwd) = launch_cwd_snapshot() {
         return cwd;
     }
-    if let Some(cwd) = std::env::current_dir().ok().filter(|p| is_usable_launch_dir(p)) {
+    if let Some(cwd) = std::env::current_dir()
+        .ok()
+        .filter(|p| is_usable_launch_dir(p))
+    {
         return cwd;
     }
     dirs::home_dir().unwrap_or_else(|| PathBuf::from("/"))
