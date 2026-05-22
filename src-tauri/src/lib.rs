@@ -115,6 +115,9 @@ pub fn run() {
         .manage({
             let registry = workspace::WorkspaceRegistry::default();
             workspace::bootstrap_registry(&registry);
+            if let Some(launch_dir) = parse_launch_dir() {
+                let _ = registry.authorize(&launch_dir);
+            }
             registry
         })
         .manage(LaunchDir(Mutex::new(parse_launch_dir())))
